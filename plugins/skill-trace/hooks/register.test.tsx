@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
 const PANE = {
@@ -15,7 +16,7 @@ const PANE = {
 } as const
 
 // 플러그인 아래에는 아무것도 없다: 이 훅들이 엔진 역할을 한다.
-const engine = (on: Parameters<Parameters<typeof test>[1]>[1]) => {
+const engine = (on: On) => {
   on('command.register', () => ({ value: { command: 'skill-trace' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -42,7 +43,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       origin: { kind: 'hook', event: 'SessionStart' },
       uuid: crypto.randomUUID(),
     } as never)
-    await $.prompt.submit({ text: 'mod 만들 수 있어?' })
+    await $.prompt.submit({ text: 'mod 만들 수 있어?' } as never)
     await $.session.append(said('[스킬근거] plugin-authoring: mod API 확인 필요') as never)
     await $.skill.prompt({ skill: 'plugin-authoring', text: '...', frontmatter: {}, source: 'built-in' } as never)
     await $.tool.call({ tool: 'mcp__plugin_context-mode_context-mode__ctx_execute' } as never)
@@ -60,7 +61,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
 test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "사용자 실행"이 된다', async ($, on) => {
   engine(on)
-  await $.prompt.submit({ text: '/superpowers:brainstorming 아이디어', command: { name: 'superpowers:brainstorming', args: '아이디어' } })
+  await $.prompt.submit({ text: '/superpowers:brainstorming 아이디어', command: { name: 'superpowers:brainstorming', args: '아이디어' } } as never)
   await $.skill.prompt({ skill: 'superpowers:brainstorming', text: '...', frontmatter: {}, source: 'plugin' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /superpowers:brainstorming — 사용자 실행/ }))).toBeTruthy()
@@ -73,7 +74,7 @@ test('prompt.compose 에 이유 규칙 섹션이 맨 끝에 붙는다', async ($
   const r = await $.prompt.compose({
     model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [],
   })
-  const last = r.sections[r.sections.length - 1]
+  const last = r.sections[r.sections.length - 1]!
   expect(last.id).toBe('skill-trace-reason')
   expect(last.scope).toBe('session')
   expect(last.text).toContain('[스킬근거]')

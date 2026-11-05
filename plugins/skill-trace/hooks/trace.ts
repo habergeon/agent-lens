@@ -19,13 +19,13 @@ const blank = (id: number, question: string): Trace => ({
 })
 
 export const startTrace = (list: Trace[], question: string): Trace[] => {
-  const id = (list.length ? list[list.length - 1].id : 0) + 1
+  const id = (list.length ? list[list.length - 1]!.id : 0) + 1
   return [...list, blank(id, cut(question, 40))].slice(-MAX)
 }
 
 export const onLatest = (list: Trace[], fn: (t: Trace) => Trace): Trace[] => {
   const base = list.length ? list : [blank(0, '(세션 시작)')]
-  return [...base.slice(0, -1), fn(base[base.length - 1])]
+  return [...base.slice(0, -1), fn(base[base.length - 1]!)]
 }
 
 // "brainstorming" 과 "superpowers:brainstorming" 을 같은 스킬로 본다.
@@ -33,7 +33,7 @@ const same = (a: string, b: string): boolean =>
   a === b || a.endsWith(':' + b) || b.endsWith(':' + a)
 
 const lastIndex = <T>(xs: readonly T[], ok: (x: T) => boolean): number => {
-  for (let i = xs.length - 1; i >= 0; i--) if (ok(xs[i])) return i
+  for (let i = xs.length - 1; i >= 0; i--) if (ok(xs[i]!)) return i
   return -1
 }
 
@@ -58,8 +58,8 @@ export const markSub = (t: Trace, name: string): Trace => {
 export const parseMcp = (tool: string): { server: string; tool: string } | undefined => {
   const m = /^mcp__(.+?)__(.+)$/.exec(tool)
   if (!m) return undefined
-  const server = m[1].startsWith('plugin_') ? m[1].slice('plugin_'.length).split('_')[0] : m[1]
-  return { server, tool: m[2] }
+  const server = m[1]!.startsWith('plugin_') ? m[1]!.slice('plugin_'.length).split('_')[0]! : m[1]!
+  return { server, tool: m[2]! }
 }
 
 export const addMcp = (t: Trace, tool: string, sub: boolean): Trace => {
@@ -84,7 +84,7 @@ export const addHook = (t: Trace, event: string, text: string): Trace => {
 }
 
 export const parseReasons = (text: string): [string, string][] =>
-  [...text.matchAll(REASON_LINE)].map(m => [m[1].trim(), cut(m[2], 80)])
+  [...text.matchAll(REASON_LINE)].map(m => [m[1]!.trim(), cut(m[2]!, 80)])
 
 export const withReason = (t: Trace, name: string, reason: string): Trace => {
   const i = lastIndex(t.skills, s => same(s.name, name) && !s.reason)

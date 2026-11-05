@@ -93,7 +93,7 @@ export const register: Register = on => {
     const older = list.slice(0, -1).reverse()
     return (
       <Box flexDirection="column">
-        {detail(newest).map(l => (
+        {detail(newest!).map(l => (
           <Text bold={l.bold} dimColor={l.dim} wrap="truncate-end">{l.text}</Text>
         ))}
         {older.map(t => (

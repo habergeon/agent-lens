@@ -5,14 +5,14 @@ import {
   onLatest, parseMcp, parseReasons, startTrace, summary, withReason,
 } from './trace'
 
-const one = (q = '질문'): Trace => startTrace([], q)[0]
+const one = (q = '질문'): Trace => startTrace([], q)[0]!
 
 test('startTrace numbers questions and keeps the last 30', async () => {
   let list: Trace[] = []
   for (let i = 0; i < MAX + 1; i++) list = startTrace(list, `q${i}`)
   expect(list.length).toBe(MAX)
-  expect(list[0].id).toBe(2)
-  expect(list[MAX - 1].id).toBe(MAX + 1)
+  expect(list[0]!.id).toBe(2)
+  expect(list[MAX - 1]!.id).toBe(MAX + 1)
 })
 
 test('startTrace cuts the question to 40 chars on one line', async () => {
@@ -23,21 +23,21 @@ test('startTrace cuts the question to 40 chars on one line', async () => {
 
 test('onLatest makes a "(세션 시작)" trace when none exists', async () => {
   const list = onLatest([], t => addHook(t, 'SessionStart', 'PONYTAIL MODE ACTIVE'))
-  expect(list[0].id).toBe(0)
-  expect(list[0].question).toBe('(세션 시작)')
-  expect(list[0].hooks[0]).toEqual({ event: 'SessionStart', head: 'PONYTAIL MODE ACTIVE', count: 1 })
+  expect(list[0]!.id).toBe(0)
+  expect(list[0]!.question).toBe('(세션 시작)')
+  expect(list[0]!.hooks[0]).toEqual({ event: 'SessionStart', head: 'PONYTAIL MODE ACTIVE', count: 1 })
 })
 
 test('a reason that arrives after the skill attaches to it', async () => {
   const t = withReason(addSkill(one(), 'superpowers:brainstorming'), 'brainstorming', '설계 먼저')
-  expect(t.skills[0].reason).toBe('설계 먼저')
+  expect(t.skills[0]!.reason).toBe('설계 먼저')
 })
 
 test('a reason that arrives before the skill waits in pending', async () => {
   const early = withReason(one(), 'superpowers:brainstorming', '설계 먼저')
   expect(early.pending['superpowers:brainstorming']).toBe('설계 먼저')
   const t = addSkill(early, 'superpowers:brainstorming')
-  expect(t.skills[0].reason).toBe('설계 먼저')
+  expect(t.skills[0]!.reason).toBe('설계 먼저')
   expect(Object.keys(t.pending).length).toBe(0)
 })
 
