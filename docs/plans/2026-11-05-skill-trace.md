@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 저장소: `C:\workspace\personal\claude-mods`, 브랜치 `main`, 커밋 계정 `johjh <hefa91@gmail.com>` (local config 설정됨)
+- 저장소: `C:\workspace\personal\claude-mods`, 브랜치 `main`, 커밋 계정 `habergeon <hefa91@gmail.com>` (local config 설정됨)
 - 형태: `johnnyvizz/claude-kit` 와 같은 다중 플러그인 마켓플레이스. 플러그인은 `plugins/<name>/`
 - 마켓플레이스 이름 `agent-lens`, 플러그인 이름 `skill-trace`, GitHub `habergeon/agent-lens`, 라이선스 MIT
 - 이유 줄 형식(고정): `[스킬근거] <스킬명>: <이유 한 줄>`
