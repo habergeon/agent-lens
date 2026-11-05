@@ -1,0 +1,107 @@
+# skill-trace 설계
+
+- 날짜: 2026-11-05
+- 상태: 설계 승인됨
+- 대상 빌드: Claude Code 2.1.318 (mod API)
+- 위치: `mods/skill-trace/` (마켓플레이스 `agent-lens`)
+
+## 목적
+
+사용자가 스킬을 직접 지정하지 않아도 Claude는 설치된 스킬과 플러그인 기능을 스스로 골라 씁니다. 그런데 무엇을 왜 썼는지는 화면에 드러나지 않습니다. `skill-trace`는 **질문 1건마다** 다음 세 가지를 옆 패널에 보여 줍니다.
+
+1. 쓰인 스킬과 그 스킬을 고른 이유
+2. 쓰인 플러그인 기능: MCP 도구, 서브에이전트, 훅 개입, 슬래시 커맨드
+3. 위 항목이 어떤 질문에 딸린 것인지
+
+작업 진행 타임라인은 이번 범위에 넣지 않습니다.
+
+## 범위 밖 (YAGNI)
+
+- 세션을 넘어서는 기록과 통계 (`$.store`). 기록이 쌓인 뒤 "어떤 스킬이 자주 헛도는지" 같은 분석이 필요해지면 추가합니다.
+- 훅이 주입한 내용이 어느 플러그인 것인지 대응하는 표. 주입 텍스트의 첫 줄만 보여 주면 사람이 알아볼 수 있습니다.
+- "검토했지만 쓰지 않은 스킬". 엔진이 관찰할 수 있게 해 주지 않습니다.
+- 모델 thinking에서 근거를 뽑는 방식. thinking은 요약되거나 가려질 수 있습니다.
+
+## 저장소 구조
+
+```
+claude-mods/
+├─ .claude-plugin/marketplace.json   name: "agent-lens", plugins: [{ name: "skill-trace", source: "./mods/skill-trace" }]
+├─ README.md                         설치: /plugin install skill-trace --marketplace juhanJoh/claude-mods
+├─ docs/specs/                       설계 문서
+└─ mods/skill-trace/
+   ├─ .claude-plugin/plugin.json     name: "skill-trace", types: "./types/index.d.ts"
+   ├─ hooks/hooks.json               { "modules": ["./register.tsx"] }
+   ├─ hooks/register.tsx             훅 모듈 (수집 + 패널 + 명령)
+   ├─ types/index.d.ts               PluginState 계약
+   └─ skill-trace.test.tsx           테스트
+```
+
+개발 중에는 `claude plugin marketplace add C:\workspace\personal\claude-mods`로 등록한 뒤 설치합니다. 이렇게 하면 설치본을 복사하지 않고 이 폴더를 직접 읽으므로, 파일을 고친 뒤 `/reload-plugins`만 실행하면 반영됩니다.
+
+## 데이터 모델
+
+```ts
+type Trace = {
+  id: number;              // 질문 순번 (1부터, "(세션 시작)" 항목은 0)
+  question: string;        // 사용자 질문 앞부분 (최대 40자)
+  at: number;              // 질문 시각 (ms)
+  skills: { name: string; reason?: string; sub?: boolean }[];
+  mcp: { server: string; tool: string; count: number; sub?: boolean }[];
+  agents: { type: string; count: number }[];
+  hooks: { event: string; head: string }[];   // head: 주입 텍스트 첫 줄 30자
+  commands: string[];                          // "/name"
+};
+// $.state 키: skill-trace.traces: Trace[] (최근 30건), skill-trace.pendingReasons: Record<string, string>
+```
+
+이유 줄은 스킬 호출보다 먼저 도착할 수 있습니다. 그래서 짝이 없는 이유는 `pendingReasons`에 이름을 키로 잠시 보관하고, 같은 이름의 스킬이 기록되면 그때 붙입니다. 반대로 스킬이 먼저 기록된 상태에서 이유가 도착하면, 아직 이유가 없는 같은 이름의 스킬 중 가장 최근 것에 붙입니다.
+
+## 수집: 이벤트별 처리
+
+| 수집 대상 | 이벤트 | 처리 |
+|---|---|---|
+| 질문 | `prompt.submit` | 새 Trace를 만듭니다. `e.command`가 있으면 `commands`에 `/name`을 추가합니다. |
+| 스킬 | `skill.prompt` | `skills`에 `{ name: e.skill }`를 추가합니다. Skill 도구, `/명령`형 스킬, 미리 로드 경로가 모두 이 이벤트로 들어옵니다. |
+| 채택 이유 | `session.append`, `door: 'response'` | 텍스트 블록에서 `/^\[스킬근거\]\s*([^:]+):\s*(.+)$/m`에 맞는 줄을 찾아 해당 스킬과 짝을 맞춥니다. |
+| MCP 도구 | `tool.call`, 도구 이름이 `mcp__`로 시작 | `mcp__<server>__<tool>` 형식을 분해하고 `plugin_<p>_<s>`에서 `<p>`를 서버 표시 이름으로 씁니다. 같은 항목이면 `count`를 늘립니다. |
+| 서브에이전트 | `tool.call`, 도구 `Agent` | 입력의 `subagent_type`을 기록합니다. 값이 없으면 `general-purpose`로 둡니다. |
+| 훅 개입 | `session.append`, `door: 'hook-context'` | `origin.kind === 'hook'`이면 `origin` 이벤트 이름과 텍스트 첫 줄을 기록합니다. |
+| 서브에이전트 내부 | 위 이벤트 중 `agentId`가 있는 것 | 같은 Trace에 `sub: true`로 표시해 기록합니다. |
+
+질문 없이 일어난 일(SessionStart 주입 등)은 `id: 0`, `question: "(세션 시작)"` 항목에 묶습니다.
+
+## 이유 규칙 주입
+
+`prompt.compose`에서 `next(e)`로 받은 `sections` 맨 끝에 `scope: 'session'` 섹션 하나를 추가합니다.
+
+> Skill 도구를 호출하기 직전, 응답 본문에 한 줄을 쓴다: `[스킬근거] <스킬명>: <이 질문에 이 스킬을 고른 이유 한 줄>`
+
+섹션 문구는 바뀌지 않는 고정 문자열이라, 세션 도중에 프롬프트 캐시가 깨지지 않습니다. 예외가 하나 있습니다. 세션 도중에 mod를 처음 켜거나 끄면 시스템 프롬프트가 바뀌어서, 그 시점에 캐시와 thinking이 한 번 초기화됩니다.
+
+## 표시: 옆 패널
+
+- `session.start`에서 `$.ui.open({ id: 'skill-trace', title: '스킬 추적' })`를 호출합니다. 터미널 폭이 좁으면 엔진이 패널을 띄우지 않고 기다립니다.
+- `/skill-trace` 명령으로 패널을 다시 엽니다.
+- `ui.render` 훅의 `{ component: 'Pane', requestId: 'skill-trace' }`에서 `traces` atom을 읽어 그립니다.
+- 가장 최근 Trace를 맨 위에 펼쳐서 보여 주고, 내용이 있는 칸만 스킬, MCP, 서브에이전트, 훅, 커맨드 순서로 그립니다.
+- 이전 Trace는 `▸ Q{id} "{question}" · 스킬 n · MCP n` 한 줄로 접어 둡니다.
+- 이유가 없는 스킬은 "이유 미기재", 커맨드는 "사용자 실행", 훅은 "훅 자동 주입 ({event})"으로 표시합니다.
+- 긴 텍스트는 말줄임표로 자릅니다.
+
+## 예외 처리
+
+- 수집 훅은 모두 `const r = await next(e)`를 먼저 호출한 다음 기록하고 `r`을 돌려줍니다. 기록 단계에서 예외가 나도 본래 동작에는 영향이 없습니다. 이 mod는 관찰만 하므로 아무것도 막지 않습니다.
+- 정규식과 맞지 않는 응답은 무시합니다.
+- 최근 30건만 보관합니다.
+- 다시 로드돼도 `$.state`는 유지됩니다. 모듈 안의 변수에는 아무것도 저장하지 않습니다.
+
+## 테스트 (`claude plugin test mods/skill-trace`)
+
+1. 질문 → 이유 줄 → `skill.prompt` 순서로 들어올 때, 스킬과 이유가 짝지어지는지 (이유가 먼저 오는 경우와 나중에 오는 경우 모두)
+2. `mcp__plugin_context-mode_context-mode__ctx_execute`를 두 번 호출하면 → `context-mode / ctx_execute ×2`로 기록되는지
+3. `hook-context` 행 → `{ event: 'SessionStart', head }`가 기록되는지
+4. 31번째 질문 → 가장 오래된 1건이 빠지는지
+5. 패널을 `terminal`과 `desktop` 두 화면에 각각 마운트했을 때 오류 없이 렌더링되는지
+
+검증 순서: `claude plugin validate` → `tsc -p mods/skill-trace` → `claude plugin test`.
