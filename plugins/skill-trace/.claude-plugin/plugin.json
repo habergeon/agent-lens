@@ -4,8 +4,8 @@
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
   "types": "./types/index.d.ts",
-  "homepage": "https://github.com/juhanJoh/claude-mods/tree/main/plugins/skill-trace",
-  "repository": "https://github.com/juhanJoh/claude-mods",
+  "homepage": "https://github.com/juhanJoh/agent-lens/tree/main/plugins/skill-trace",
+  "repository": "https://github.com/juhanJoh/agent-lens",
   "keywords": ["skills", "trace", "mod", "pane"],
   "license": "MIT"
 }

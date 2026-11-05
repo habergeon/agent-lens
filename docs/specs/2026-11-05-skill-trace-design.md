@@ -27,7 +27,7 @@
 여러 mod를 한 repo에 담는 마켓플레이스인 `johnnyvizz/claude-kit`의 형태를 따릅니다.
 
 ```
-claude-mods/
+agent-lens/
 ├─ .claude-plugin/marketplace.json   name "agent-lens", owner {name,url}, metadata.description,
 │                                    plugins: [{ name, source: "./plugins/skill-trace", description, version, category: "mod" }]
 ├─ .gitignore                        **/.claude-plugin/types/, tsconfig.json, node_modules/
@@ -43,9 +43,9 @@ claude-mods/
    └─ types/index.d.ts               PluginState 계약
 ```
 
-설치 명령: `/plugin marketplace add juhanJoh/claude-mods` → `/plugin install skill-trace@agent-lens`
+설치 명령: `/plugin marketplace add juhanJoh/agent-lens` → `/plugin install skill-trace@agent-lens`
 
-개발 중에는 `claude plugin marketplace add C:\workspace\personal\claude-mods`로 등록한 뒤 설치합니다. 이렇게 하면 설치본을 복사하지 않고 이 폴더를 직접 읽으므로, 파일을 고친 뒤 `/reload-plugins`만 실행하면 반영됩니다.
+개발 중에는 `claude plugin marketplace add C:\workspace\personal\agent-lens`로 등록한 뒤 설치합니다. 이렇게 하면 설치본을 복사하지 않고 이 폴더를 직접 읽으므로, 파일을 고친 뒤 `/reload-plugins`만 실행하면 반영됩니다.
 
 ## 데이터 모델
 

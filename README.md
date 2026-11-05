@@ -1,4 +1,4 @@
-# claude-mods
+# agent-lens
 
 [Claude Code](https://claude.com/claude-code)용 mod 모음입니다. 마켓플레이스 이름은 `agent-lens`이고, `plugins/` 아래 각 항목이 독립 플러그인이라 필요한 것만 설치하면 됩니다.
 
@@ -11,18 +11,18 @@
 ### From the marketplace
 
 ```
-/plugin marketplace add juhanJoh/claude-mods
+/plugin marketplace add juhanJoh/agent-lens
 /plugin install skill-trace@agent-lens
 ```
 
 ### By hand
 
 ```bash
-git clone https://github.com/juhanJoh/claude-mods.git ~/claude-mods
-claude --plugin-dir ~/claude-mods/plugins/skill-trace
+git clone https://github.com/juhanJoh/agent-lens.git ~/agent-lens
+claude --plugin-dir ~/agent-lens/plugins/skill-trace
 ```
 
-모든 세션에 적용하려면 `~/.claude/settings.json` 의 `env` 에 `"CLAUDE_CODE_PLUGIN_DIRS": "~/claude-mods/plugins/skill-trace"` 를 넣습니다.
+모든 세션에 적용하려면 `~/.claude/settings.json` 의 `env` 에 `"CLAUDE_CODE_PLUGIN_DIRS": "~/agent-lens/plugins/skill-trace"` 를 넣습니다.
 
 Mods are built on function hooks (`hooks/register.tsx`), an early-access Claude Code API: tested on Claude Code 2.1.318, and it may change between releases.
 
