@@ -2,10 +2,10 @@
   "name": "skill-trace",
   "version": "0.1.0",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
-  "author": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
+  "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
-  "homepage": "https://github.com/juhanJoh/agent-lens/tree/main/plugins/skill-trace",
-  "repository": "https://github.com/juhanJoh/agent-lens",
+  "homepage": "https://github.com/habergeon/agent-lens/tree/main/plugins/skill-trace",
+  "repository": "https://github.com/habergeon/agent-lens",
   "keywords": ["skills", "trace", "mod", "pane"],
   "license": "MIT"
 }

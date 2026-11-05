@@ -11,14 +11,14 @@
 ### From the marketplace
 
 ```
-/plugin marketplace add juhanJoh/agent-lens
+/plugin marketplace add habergeon/agent-lens
 /plugin install skill-trace@agent-lens
 ```
 
 ### By hand
 
 ```bash
-git clone https://github.com/juhanJoh/agent-lens.git ~/agent-lens
+git clone https://github.com/habergeon/agent-lens.git ~/agent-lens
 claude --plugin-dir ~/agent-lens/plugins/skill-trace
 ```
 

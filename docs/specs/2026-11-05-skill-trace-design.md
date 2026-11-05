@@ -43,7 +43,7 @@ agent-lens/
    └─ types/index.d.ts               PluginState 계약
 ```
 
-설치 명령: `/plugin marketplace add juhanJoh/agent-lens` → `/plugin install skill-trace@agent-lens`
+설치 명령: `/plugin marketplace add habergeon/agent-lens` → `/plugin install skill-trace@agent-lens`
 
 개발 중에는 `claude plugin marketplace add C:\workspace\personal\agent-lens`로 등록한 뒤 설치합니다. 이렇게 하면 설치본을 복사하지 않고 이 폴더를 직접 읽으므로, 파일을 고친 뒤 `/reload-plugins`만 실행하면 반영됩니다.
 

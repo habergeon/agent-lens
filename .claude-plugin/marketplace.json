@@ -1,6 +1,6 @@
 {
   "name": "agent-lens",
-  "owner": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
+  "owner": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "metadata": { "description": "Claude Code mods that show what the agent is doing and why." },
   "plugins": [
     {
