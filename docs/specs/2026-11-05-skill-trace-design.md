@@ -3,7 +3,7 @@
 - 날짜: 2026-11-05
 - 상태: 설계 승인됨
 - 대상 빌드: Claude Code 2.1.318 (mod API)
-- 위치: `mods/skill-trace/` (마켓플레이스 `agent-lens`)
+- 위치: `plugins/skill-trace/` (마켓플레이스 `agent-lens`)
 
 ## 목적
 
@@ -24,18 +24,26 @@
 
 ## 저장소 구조
 
+여러 mod를 한 repo에 담는 마켓플레이스인 `johnnyvizz/claude-kit`의 형태를 따릅니다.
+
 ```
 claude-mods/
-├─ .claude-plugin/marketplace.json   name: "agent-lens", plugins: [{ name: "skill-trace", source: "./mods/skill-trace" }]
-├─ README.md                         설치: /plugin install skill-trace --marketplace juhanJoh/claude-mods
+├─ .claude-plugin/marketplace.json   name "agent-lens", owner {name,url}, metadata.description,
+│                                    plugins: [{ name, source: "./plugins/skill-trace", description, version, category: "mod" }]
+├─ .gitignore                        **/.claude-plugin/types/, tsconfig.json, node_modules/
+├─ LICENSE                           MIT
+├─ README.md                         플러그인 표 · 설치(마켓플레이스 / 수동) · 폴더 구조
 ├─ docs/specs/                       설계 문서
-└─ mods/skill-trace/
-   ├─ .claude-plugin/plugin.json     name: "skill-trace", types: "./types/index.d.ts"
+└─ plugins/skill-trace/
+   ├─ .claude-plugin/plugin.json     name, version, description, author, types, homepage, repository, license
+   ├─ README.md                      기능 · 표시 항목 · 한계
    ├─ hooks/hooks.json               { "modules": ["./register.tsx"] }
    ├─ hooks/register.tsx             훅 모듈 (수집 + 패널 + 명령)
-   ├─ types/index.d.ts               PluginState 계약
-   └─ skill-trace.test.tsx           테스트
+   ├─ hooks/register.test.tsx        테스트
+   └─ types/index.d.ts               PluginState 계약
 ```
+
+설치 명령: `/plugin marketplace add juhanJoh/claude-mods` → `/plugin install skill-trace@agent-lens`
 
 개발 중에는 `claude plugin marketplace add C:\workspace\personal\claude-mods`로 등록한 뒤 설치합니다. 이렇게 하면 설치본을 복사하지 않고 이 폴더를 직접 읽으므로, 파일을 고친 뒤 `/reload-plugins`만 실행하면 반영됩니다.
 
@@ -96,7 +104,7 @@ type Trace = {
 - 최근 30건만 보관합니다.
 - 다시 로드돼도 `$.state`는 유지됩니다. 모듈 안의 변수에는 아무것도 저장하지 않습니다.
 
-## 테스트 (`claude plugin test mods/skill-trace`)
+## 테스트 (`claude plugin test plugins/skill-trace`)
 
 1. 질문 → 이유 줄 → `skill.prompt` 순서로 들어올 때, 스킬과 이유가 짝지어지는지 (이유가 먼저 오는 경우와 나중에 오는 경우 모두)
 2. `mcp__plugin_context-mode_context-mode__ctx_execute`를 두 번 호출하면 → `context-mode / ctx_execute ×2`로 기록되는지
@@ -104,4 +112,4 @@ type Trace = {
 4. 31번째 질문 → 가장 오래된 1건이 빠지는지
 5. 패널을 `terminal`과 `desktop` 두 화면에 각각 마운트했을 때 오류 없이 렌더링되는지
 
-검증 순서: `claude plugin validate` → `tsc -p mods/skill-trace` → `claude plugin test`.
+검증 순서: `claude plugin validate` → `tsc -p plugins/skill-trace` → `claude plugin test`.
