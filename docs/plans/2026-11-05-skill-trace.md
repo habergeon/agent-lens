@@ -12,7 +12,7 @@
 
 - 저장소: `C:\workspace\personal\claude-mods`, 브랜치 `main`, 커밋 계정 `johjh <hefa91@gmail.com>` (local config 설정됨)
 - 형태: `johnnyvizz/claude-kit` 와 같은 다중 플러그인 마켓플레이스. 플러그인은 `plugins/<name>/`
-- 마켓플레이스 이름 `agent-lens`, 플러그인 이름 `skill-trace`, GitHub `juhanJoh/claude-mods`, 라이선스 MIT
+- 마켓플레이스 이름 `agent-lens`, 플러그인 이름 `skill-trace`, GitHub `habergeon/agent-lens`, 라이선스 MIT
 - 이유 줄 형식(고정): `[스킬근거] <스킬명>: <이유 한 줄>`
 - 질문 최대 30건 보관, 질문 미리보기 40자, 훅 첫 줄 30자, 이유 80자
 - 패널 id `skill-trace`, 제목 `스킬 추적`, 명령 `/skill-trace`
@@ -50,7 +50,7 @@
 ```json
 {
   "name": "agent-lens",
-  "owner": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
+  "owner": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "metadata": { "description": "Claude Code mods that show what the agent is doing and why." },
   "plugins": [
     {
@@ -75,7 +75,7 @@ node_modules/
 tsconfig.json
 ```
 
-- [ ] **Step 3: `LICENSE`** — MIT 전문, 첫 줄 `MIT License`, 저작권 줄 `Copyright (c) 2026 juhanJoh`
+- [ ] **Step 3: `LICENSE`** — MIT 전문, 첫 줄 `MIT License`, 저작권 줄 `Copyright (c) 2026 habergeon`
 
 - [ ] **Step 4: 매니페스트** — `plugins/skill-trace/.claude-plugin/plugin.json`
 
@@ -84,10 +84,10 @@ tsconfig.json
   "name": "skill-trace",
   "version": "0.1.0",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
-  "author": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
+  "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
-  "homepage": "https://github.com/juhanJoh/claude-mods/tree/main/plugins/skill-trace",
-  "repository": "https://github.com/juhanJoh/claude-mods",
+  "homepage": "https://github.com/habergeon/agent-lens/tree/main/plugins/skill-trace",
+  "repository": "https://github.com/habergeon/agent-lens",
   "keywords": ["skills", "trace", "mod", "pane"],
   "license": "MIT"
 }
@@ -676,14 +676,14 @@ git commit -m "feat(skill-trace): 이벤트 수집·이유 규칙·패널·/skil
 ### From the marketplace
 
 ```
-/plugin marketplace add juhanJoh/claude-mods
+/plugin marketplace add habergeon/agent-lens
 /plugin install skill-trace@agent-lens
 ```
 
 ### By hand
 
 ```bash
-git clone https://github.com/juhanJoh/claude-mods.git ~/claude-mods
+git clone https://github.com/habergeon/agent-lens.git ~/claude-mods
 claude --plugin-dir ~/claude-mods/plugins/skill-trace
 ```
 
