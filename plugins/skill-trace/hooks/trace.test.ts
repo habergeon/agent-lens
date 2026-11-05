@@ -50,6 +50,16 @@ test('parseReasons finds every tagged line', async () => {
   ])
 })
 
+test('parseReasons accepts a name wrapped in backticks or bold', async () => {
+  expect(parseReasons('[스킬근거] `superpowers:brainstorming`: 설계')).toEqual([['superpowers:brainstorming', '설계']])
+  expect(parseReasons('[스킬근거]** ponytail:ponytail**: 최소')).toEqual([['ponytail:ponytail', '최소']])
+})
+
+test('addHook strips system-reminder tags and the hook prefix', async () => {
+  const t = addHook(one(), 'SessionStart', '<system-reminder>\nSessionStart hook additional context: PONYTAIL MODE ACTIVE\n</system-reminder>')
+  expect(t.hooks[0]!.head).toBe('PONYTAIL MODE ACTIVE')
+})
+
 test('parseMcp reads the server from plugin and plain names', async () => {
   expect(parseMcp('mcp__plugin_context-mode_context-mode__ctx_execute')).toEqual({ server: 'context-mode', tool: 'ctx_execute' })
   expect(parseMcp('mcp__savvy-progress__step')).toEqual({ server: 'savvy-progress', tool: 'step' })

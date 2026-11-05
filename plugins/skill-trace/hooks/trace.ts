@@ -7,7 +7,7 @@ export const REASON_RULE =
   '`[스킬근거] <스킬명>: <이 질문에 이 스킬을 고른 이유 한 줄>`. ' +
   '이 줄은 skill-trace 패널이 읽어 사용자에게 보여 준다.'
 
-const REASON_LINE = /^[\s`*>\-•]*\[스킬근거\]\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm
+const REASON_LINE = /^[\s`*>\-•]*\[스킬근거\][*`]*\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm
 
 export const cut = (s: string, n: number): string => {
   const flat = s.replace(/\s+/g, ' ').trim()
@@ -29,7 +29,7 @@ export const onLatest = (list: Trace[], fn: (t: Trace) => Trace): Trace[] => {
 }
 
 // "brainstorming" 과 "superpowers:brainstorming" 을 같은 스킬로 본다.
-const same = (a: string, b: string): boolean =>
+export const same = (a: string, b: string): boolean =>
   a === b || a.endsWith(':' + b) || b.endsWith(':' + a)
 
 const lastIndex = <T>(xs: readonly T[], ok: (x: T) => boolean): number => {
@@ -77,14 +77,15 @@ export const addAgent = (t: Trace, type: string): Trace => {
 }
 
 export const addHook = (t: Trace, event: string, text: string): Trace => {
-  const head = cut(text.split('\n').find(l => l.trim() !== '') ?? '', 30)
+  const body = text.replace(/<\/?system-reminder>/g, '').replace(/^\s*\w+ hook additional context:\s*/, '')
+  const head = cut(body.split('\n').find(l => l.trim() !== '') ?? '', 30)
   const i = t.hooks.findIndex(h => h.event === event && h.head === head)
   if (i >= 0) return { ...t, hooks: t.hooks.map((h, j) => (j === i ? { ...h, count: h.count + 1 } : h)) }
   return { ...t, hooks: [...t.hooks, { event, head, count: 1 }] }
 }
 
 export const parseReasons = (text: string): [string, string][] =>
-  [...text.matchAll(REASON_LINE)].map(m => [m[1]!.trim(), cut(m[2]!, 80)])
+  [...text.matchAll(REASON_LINE)].map(m => [m[1]!.replace(/[`*]/g, '').trim(), cut(m[2]!, 80)])
 
 export const withReason = (t: Trace, name: string, reason: string): Trace => {
   const i = lastIndex(t.skills, s => same(s.name, name) && !s.reason)

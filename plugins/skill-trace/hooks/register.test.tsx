@@ -72,12 +72,60 @@ test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "사용자
 test('prompt.compose 에 이유 규칙 섹션이 맨 끝에 붙는다', async ($, on) => {
   engine(on)
   const r = await $.prompt.compose({
-    model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [],
+    model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: ['Skill'], outputStyle: null, traits: [],
   })
   const last = r.sections[r.sections.length - 1]!
   expect(last.id).toBe('skill-trace-reason')
   expect(last.scope).toBe('session')
   expect(last.text).toContain('[스킬근거]')
+})
+
+test('Skill 도구가 없는 루프에는 이유 규칙을 붙이지 않는다', async ($, on) => {
+  engine(on)
+  const r = await $.prompt.compose({
+    model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [],
+  })
+  expect(r.sections.some(x => x.id === 'skill-trace-reason')).toBe(false)
+})
+
+test('스킬로 이어지지 않는 슬래시 커맨드는 질문으로 기록되지 않는다', async ($, on) => {
+  engine(on)
+  await $.prompt.submit({ text: '/skill-trace', command: { name: 'skill-trace', args: '' } } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('아직 기록된 질문이 없습니다.')
+  await ui.unmount()
+})
+
+test('슬래시 커맨드 뒤 다른 프롬프트가 오면 보류한 커맨드는 버려진다', async ($, on) => {
+  engine(on)
+  await $.prompt.submit({ text: '/model', command: { name: 'model', args: '' } } as never)
+  await $.prompt.submit({ text: '진짜 질문' } as never)
+  await $.skill.prompt({ skill: 'model', text: '...', frontmatter: {}, source: 'built-in' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Q1 "진짜 질문"/ }))).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: /^  · \/model$/ }))).toBeFalsy()
+  await ui.unmount()
+})
+
+test('백그라운드·피어 프롬프트는 질문으로 기록되지 않는다', async ($, on) => {
+  engine(on)
+  await $.prompt.submit({ text: '작업 끝', origin: { kind: 'task-notification' } } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('아직 기록된 질문이 없습니다.')
+  await ui.unmount()
+})
+
+test('hook-context 가 아닌 door 의 훅 행도 훅으로 센다', async ($, on) => {
+  engine(on)
+  await $.session.append({
+    message: { type: 'attachment', content: [{ type: 'text', text: '<system-reminder>\nSessionStart hook additional context: PONYTAIL MODE ACTIVE\n</system-reminder>' }] },
+    door: 'attachment',
+    origin: { kind: 'hook', event: 'SessionStart' },
+    uuid: crypto.randomUUID(),
+  } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /SessionStart: PONYTAIL MODE ACTIVE/ }))).toBeTruthy()
+  await ui.unmount()
 })
 
 test('기록이 없으면 안내 문구를 보인다', async ($, on) => {

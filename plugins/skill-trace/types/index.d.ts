@@ -3,6 +3,9 @@ export type McpUse = { server: string; tool: string; count: number; sub?: boolea
 export type AgentUse = { type: string; count: number }
 export type HookUse = { event: string; head: string; count: number }
 
+/** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
+export type Parked = { text: string; name: string }
+
 export type Trace = {
   /** 질문 순번. 1부터. 0 은 질문 전에 일어난 일을 묶는 "(세션 시작)" 항목. */
   id: number
@@ -18,6 +21,6 @@ export type Trace = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'skill-trace': { traces: Shaped<Trace[]> }
+    'skill-trace': { traces: Shaped<Trace[]>; parked: Shaped<Parked | null> }
   }
 }
