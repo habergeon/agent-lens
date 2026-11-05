@@ -42,10 +42,11 @@ test('a reason that arrives before the skill waits in pending', async () => {
 })
 
 test('parseReasons finds every tagged line', async () => {
-  const text = '먼저 확인합니다.\n[스킬근거] plugin-authoring: mod API 확인 필요\n본문\n[스킬근거] a:b: 콜론 포함'
+  const text = '먼저 확인합니다.\n[스킬근거] plugin-authoring: mod API 확인 필요\n본문\n[스킬근거] superpowers:brainstorming: 설계 먼저: 근거\n- `[스킬근거] ponytail:ponytail: 최소 구현`'
   expect(parseReasons(text)).toEqual([
     ['plugin-authoring', 'mod API 확인 필요'],
-    ['a', 'b: 콜론 포함'],
+    ['superpowers:brainstorming', '설계 먼저: 근거'],
+    ['ponytail:ponytail', '최소 구현'],
   ])
 })
 

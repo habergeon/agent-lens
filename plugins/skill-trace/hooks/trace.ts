@@ -7,7 +7,7 @@ export const REASON_RULE =
   '`[스킬근거] <스킬명>: <이 질문에 이 스킬을 고른 이유 한 줄>`. ' +
   '이 줄은 skill-trace 패널이 읽어 사용자에게 보여 준다.'
 
-const REASON_LINE = /^\[스킬근거\]\s*([^:\n]+?)\s*:\s*(.+)$/gm
+const REASON_LINE = /^[\s`*>\-•]*\[스킬근거\]\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm
 
 export const cut = (s: string, n: number): string => {
   const flat = s.replace(/\s+/g, ' ').trim()
