@@ -10,6 +10,8 @@ export type Trace = {
   /** 질문 순번. 1부터. 0 은 질문 전에 일어난 일을 묶는 "(세션 시작)" 항목. */
   id: number
   question: string
+  /** 질문이 미리보기(40자)보다 길 때의 전체 텍스트(최대 2000자). 펼친 항목에서 보여 준다. */
+  full?: string
   skills: SkillUse[]
   mcp: McpUse[]
   agents: AgentUse[]
@@ -21,6 +23,7 @@ export type Trace = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'skill-trace': { traces: Shaped<Trace[]>; parked: Shaped<Parked | null> }
+    /** open: 펼친 질문 id. null 이면 최신 질문, -1 이면 모두 접힘. */
+    'skill-trace': { traces: Shaped<Trace[]>; parked: Shaped<Parked | null>; open: Shaped<number | null> }
   }
 }

@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { Trace } from '../types'
 import {
-  MAX, addAgent, addCommand, addHook, addMcp, addSkill, detail, markSub,
-  onLatest, parseMcp, parseReasons, startTrace, summary, withReason,
+  MAX, addAgent, addCommand, addHook, addMcp, addSkill, addSource, commandName, detail, hookEvents, markSub,
+  onLatest, parseMcp, parseReasons, settingsSources, startTrace, summary, title, withReason,
 } from './trace'
 
 const one = (q = '질문'): Trace => startTrace([], q)[0]!
@@ -91,10 +91,41 @@ test('detail shows fallbacks and summary counts', async () => {
   t = addSkill(t, 'superpowers:brainstorming')
   t = addSkill(t, 'plugin-authoring')
   const text = detail(t).map(l => l.text).join('\n')
-  expect(text).toContain('Q1 "mod 검토해줘"')
+  expect(title(t)).toBe('Q1 "mod 검토해줘"')
   expect(text).toContain('superpowers:brainstorming — 사용자 실행')
   expect(text).toContain('plugin-authoring — 이유 미기재')
   expect(text).toContain('/superpowers:brainstorming')
   expect(summary(t)).toBe('▸ Q1 "mod 검토해줘" · 스킬 2 · 커맨드 1')
   expect(detail(one()).map(l => l.text)).toContain('  (스킬·플러그인 기능 사용 없음)')
+})
+
+test('a long question keeps its full text; a short one does not', async () => {
+  const long = '그누보드랑 php 사용하는녀석들을 PC에 보관 했던거지?\n대상과 명세 기준에 접속 방법 등을 정리해서 알려줄래?'
+  expect(one(long).full).toBe(long)
+  expect(one(long).question.length).toBe(40)
+  expect(one('짧은 질문').full).toBe(undefined)
+})
+
+test('settings hooks are named by their command', async () => {
+  expect(commandName('C:/Users/x/.orca/agent-hooks/orca-agent-hook.exe claude')).toBe('orca-agent-hook')
+  expect(commandName('codegraph.cmd prompt-hook')).toBe('codegraph')
+  expect(commandName('"C:/fnm/node.exe" "C:/Users/x/.claude/hooks/context-mode-cache-heal.mjs"')).toBe('context-mode-cache-heal')
+  expect(commandName('powershell -NoProfile -File "C:\\h\\herdr-agent-state.ps1" session')).toBe('herdr-agent-state')
+  expect(settingsSources({ hooks: {
+    PreToolUse: [{ matcher: '', hooks: [{ command: 'a.exe' }, { command: 'b.cmd x' }] }],
+    Stop: [{ hooks: [{ command: 'a.exe' }] }],
+  } })).toEqual({ PreToolUse: ['a', 'b'], Stop: ['a'] })
+})
+
+test('hook rows carry their source candidates; quiet ones are dim', async () => {
+  let s = addSource({}, hookEvents({ hooks: { PreToolUse: [], SessionStart: [] } }), 'context-mode')
+  s = addSource(s, hookEvents({ hooks: { PreToolUse: [] } }), 'settings')
+  s = addSource(s, hookEvents({ modules: ['./register.tsx'] }), 'some-mod')
+  expect(s).toEqual({ PreToolUse: ['context-mode', 'settings'], SessionStart: ['context-mode'] })
+
+  let t = addHook(one(), 'SessionStart', 'PONYTAIL MODE ACTIVE')
+  t = addHook(addHook(t, 'PreToolUse', ''), 'PreToolUse', '')
+  const lines = detail(t, s)
+  expect(lines.find(l => l.text.includes('SessionStart'))).toEqual({ text: '  · SessionStart: PONYTAIL MODE ACTIVE ← context-mode' })
+  expect(lines.find(l => l.text.includes('PreToolUse'))).toEqual({ text: '  · PreToolUse ×2 (주입 없음) ← context-mode, settings', dim: true })
 })

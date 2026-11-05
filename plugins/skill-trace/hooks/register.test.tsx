@@ -53,14 +53,42 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.tool.call({ tool: 'Agent', subagent_type: 'Explore', prompt: 'p', description: 'd' } as never)
 
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /Q1 "mod 만들 수 있어\?"/ }))).toBeTruthy()
+    expect((await ui.find({ type: 'Button', text: /Q1 "mod 만들 수 있어\?"/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /plugin-authoring — mod API 확인 필요/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /context-mode: ctx_execute/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /Explore/ }))).toBeTruthy()
-    expect((await ui.find({ type: 'Text', text: /Q0 "\(세션 시작\)" · 훅 1/ }))).toBeTruthy()
+    expect((await ui.find({ type: 'Button', text: /Q0 "\(세션 시작\)" · 훅 1/ }))).toBeTruthy()
     await ui.unmount()
   })
 }
+
+test('질문 줄을 눌러 펼치고 접으며, 펼친 질문은 전체 텍스트를 보인다', async ($, on) => {
+  engine(on)
+  const long = '그누보드랑 php 사용하는녀석들을 PC에 보관 했던거지? 대상과 명세 기준에 접속 방법 등을 정리해서 알려줄래?'
+  await $.prompt.submit({ text: long } as never)
+  await $.prompt.submit({ text: '두 번째 질문' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  // 처음엔 최신(Q2)이 펼쳐지고 Q1 은 접힌 한 줄.
+  expect(await ui.find({ type: 'Button', text: /^▾ Q2/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /^▸ Q1/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: long })).toBeFalsy()
+
+  // Q1 을 누르면 Q1 이 펼쳐지고 전체 질문이 보인다.
+  await ui.press({ key: 'q1' })
+  expect(await ui.find({ type: 'Button', text: /^▾ Q1/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: long })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /^▸ Q2/ })).toBeTruthy()
+
+  // 펼친 Q1 을 다시 누르면 모두 접힌다.
+  await ui.press({ key: 'q1' })
+  expect(await ui.find({ type: 'Button', text: /^▾/ })).toBeFalsy()
+
+  // 새 질문이 오면 다시 최신이 펼쳐진다.
+  await $.prompt.submit({ text: '세 번째' } as never)
+  expect(await ui.find({ type: 'Button', text: /^▾ Q3/ })).toBeTruthy()
+  await ui.unmount()
+})
 
 test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "사용자 실행"이 된다', async ($, on) => {
   engine(on)
@@ -122,7 +150,7 @@ test('슬래시 커맨드 뒤 다른 프롬프트가 오면 보류한 커맨드�
   await $.prompt.submit({ text: '진짜 질문' } as never)
   await $.skill.prompt({ skill: 'model', text: '...', frontmatter: {}, source: 'built-in' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /Q1 "진짜 질문"/ }))).toBeTruthy()
+  expect((await ui.find({ type: 'Button', text: /Q1 "진짜 질문"/ }))).toBeTruthy()
   expect((await ui.find({ type: 'Text', text: /^  · \/model$/ }))).toBeFalsy()
   await ui.unmount()
 })

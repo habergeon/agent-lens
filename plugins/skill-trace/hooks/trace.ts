@@ -20,8 +20,14 @@ const blank = (id: number, question: string): Trace => ({
 
 export const startTrace = (list: Trace[], question: string): Trace[] => {
   const id = (list.length ? list[list.length - 1]!.id : 0) + 1
-  return [...list, blank(id, cut(question, 40))].slice(-MAX)
+  const short = cut(question, 40)
+  const t = blank(id, short)
+  // 미리보기가 잘렸을 때만 전체를 둔다(줄바꿈 유지).
+  if (short.endsWith('…')) t.full = question.trim().slice(0, 2000)
+  return [...list, t].slice(-MAX)
 }
+
+export const title = (t: Trace): string => `Q${t.id} "${t.question}"`
 
 export const onLatest = (list: Trace[], fn: (t: Trace) => Trace): Trace[] => {
   const base = list.length ? list : [blank(0, '(세션 시작)')]
@@ -98,22 +104,64 @@ export type Line = { text: string; bold?: boolean; dim?: boolean }
 const times = (n: number): string => (n > 1 ? ` ×${n}` : '')
 const subTag = (sub?: boolean): string => (sub ? ' (sub)' : '')
 
-export const detail = (t: Trace): Line[] => {
-  const out: Line[] = [{ text: `▾ Q${t.id} "${t.question}"`, bold: true }]
-  const section = (title: string, rows: string[]) => {
-    if (rows.length === 0) return
-    out.push({ text: ` ${title}`, dim: true })
-    for (const r of rows) out.push({ text: `  · ${r}` })
+/** 훅 이벤트 이름 → 그 이벤트에 훅을 등록한 곳(플러그인 이름, 'settings'). */
+export type Sources = Record<string, string[]>
+
+// hooks.json 이나 settings 의 `{ hooks: { PreToolUse: [...], ... } }` 에서 이벤트 이름을 꺼낸다.
+export const hookEvents = (json: unknown): string[] => {
+  const hooks = (json as { hooks?: unknown } | null)?.hooks
+  return hooks && typeof hooks === 'object' && !Array.isArray(hooks) ? Object.keys(hooks) : []
+}
+
+// 훅 명령에서 알아볼 이름: 실행 파일·스크립트의 파일명(확장자 제외). 예) orca-agent-hook.exe claude → orca-agent-hook
+export const commandName = (cmd: string): string => {
+  const files = cmd.match(/[^\s"'\\/]+\.(exe|cmd|bat|ps1|mjs|cjs|js|ts|sh|py)\b/gi) ?? []
+  const pick = files.filter(f => !/^(node|bun|deno|python3?|powershell|pwsh|bash|sh)\./i.test(f)).pop() ?? files.pop()
+  return (pick ?? cmd.trim().split(/\s+/)[0] ?? cmd).replace(/\.[a-z0-9]+$/i, '')
+}
+
+// settings 의 hooks: 이벤트마다 그 이벤트에 걸린 명령 이름들.
+export const settingsSources = (json: unknown): Sources => {
+  let out: Sources = {}
+  const hooks = (json as { hooks?: Record<string, { hooks?: { command?: string }[] }[]> } | null)?.hooks ?? {}
+  for (const [ev, groups] of Object.entries(hooks)) {
+    for (const g of Array.isArray(groups) ? groups : []) {
+      for (const h of g.hooks ?? []) if (h.command) out = addSource(out, [ev], commandName(h.command))
+    }
   }
-  section('스킬', t.skills.map(s => {
+  return out
+}
+
+export const addSource = (s: Sources, events: string[], who: string): Sources => {
+  const out = { ...s }
+  for (const ev of events) if (!(out[ev] ?? []).includes(who)) out[ev] = [...(out[ev] ?? []), who]
+  return out
+}
+
+// 펼친 질문의 본문 줄(제목 줄은 패널이 버튼으로 그린다).
+export const detail = (t: Trace, sources: Sources = {}): Line[] => {
+  const out: Line[] = []
+  const section = (name: string, rows: Line[]) => {
+    if (rows.length === 0) return
+    out.push({ text: ` ${name}`, dim: true })
+    for (const r of rows) out.push({ ...r, text: `  · ${r.text}` })
+  }
+  const plain = (xs: string[]): Line[] => xs.map(text => ({ text }))
+  section('스킬', plain(t.skills.map(s => {
     const why = s.reason ?? (t.commands.some(c => same(c.slice(1), s.name)) ? '사용자 실행' : '이유 미기재')
     return `${s.name}${subTag(s.sub)} — ${why}`
-  }))
-  section('MCP', t.mcp.map(m => `${m.server}: ${m.tool}${times(m.count)}${subTag(m.sub)}`))
-  section('서브에이전트', t.agents.map(a => `${a.type}${times(a.count)}`))
-  section('훅', t.hooks.map(h => `${h.event}: ${h.head}${times(h.count)}`))
-  section('커맨드', t.commands)
-  if (out.length === 1) out.push({ text: '  (스킬·플러그인 기능 사용 없음)', dim: true })
+  })))
+  section('MCP', plain(t.mcp.map(m => `${m.server}: ${m.tool}${times(m.count)}${subTag(m.sub)}`)))
+  section('서브에이전트', plain(t.agents.map(a => `${a.type}${times(a.count)}`)))
+  // 엔진은 어느 플러그인의 훅이 돌았는지 mod 에 알려 주지 않는다: 그 이벤트에 훅을 등록한 곳을 "후보"로 붙인다.
+  // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.
+  const from = (ev: string) => (sources[ev]?.length ? ` ← ${sources[ev]!.join(', ')}` : '')
+  section('훅', [
+    ...t.hooks.filter(h => h.head !== '').map(h => ({ text: `${h.event}: ${h.head}${times(h.count)}${from(h.event)}` })),
+    ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (주입 없음)${from(h.event)}`, dim: true })),
+  ])
+  section('커맨드', plain(t.commands))
+  if (out.length === 0) out.push({ text: '  (스킬·플러그인 기능 사용 없음)', dim: true })
   return out
 }
 
