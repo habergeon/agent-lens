@@ -7,7 +7,7 @@
       "name": "skill-trace",
       "source": "./plugins/skill-trace",
       "description": "Mod: a side pane listing, per question, the skills Claude chose (with its reason) and the plugin features it used: MCP tools, subagents, hooks, slash commands.",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "category": "mod"
     }
   ]

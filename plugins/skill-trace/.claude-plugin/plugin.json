@@ -1,6 +1,6 @@
 {
   "name": "skill-trace",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
@@ -11,14 +11,14 @@
     "start": {
       "type": "string",
       "title": "Open at start",
-      "description": "on: the 스킬 추적 pane opens when a session starts. off: it stays closed until you run /skill-trace.",
+      "description": "on: the Skill Trace pane opens when a session starts. off: it stays closed until you run /skill-trace.",
       "default": "on",
       "options": ["on", "off"]
     },
     "reason": {
       "type": "string",
       "title": "Ask for reasons",
-      "description": "on: a reason tool (mcp__skill-trace__reason) is registered and Claude records { skill, reason } alongside each Skill call; the pane shows it. off: no tool or rule is added; skills show 이유 미기재.",
+      "description": "on: a reason tool (mcp__skill-trace__reason) is registered and Claude records { skill, reason } alongside each Skill call; the pane shows it. off: no tool or rule is added; skills show 'no reason given'.",
       "default": "on",
       "options": ["on", "off"]
     }

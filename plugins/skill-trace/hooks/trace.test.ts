@@ -21,10 +21,10 @@ test('startTrace cuts the question to 40 chars on one line', async () => {
   expect(t.question.endsWith('…')).toBe(true)
 })
 
-test('onLatest makes a "(세션 시작)" trace when none exists', async () => {
+test('onLatest makes a "(session start)" trace when none exists', async () => {
   const list = onLatest([], t => addHook(t, 'SessionStart', 'PONYTAIL MODE ACTIVE'))
   expect(list[0]!.id).toBe(0)
-  expect(list[0]!.question).toBe('(세션 시작)')
+  expect(list[0]!.question).toBe('(session start)')
   expect(list[0]!.hooks[0]).toEqual({ event: 'SessionStart', head: 'PONYTAIL MODE ACTIVE', count: 1 })
 })
 
@@ -92,24 +92,24 @@ test('sections show fallbacks; counts summarise them', async () => {
   t = addSkill(t, 'plugin-authoring')
   expect(title(t)).toBe('Q1 "mod 검토해줘"')
   const [skills, commands] = sections(t)
-  expect(skills).toMatchObject({ key: 'skill', title: '스킬', count: 2 })
+  expect(skills).toMatchObject({ key: 'skill', title: 'Skills', count: 2 })
   expect(skills!.items).toEqual([
-    { text: 'superpowers:brainstorming', sub: '사용자 실행' },
-    { text: 'plugin-authoring', sub: '이유 미기재' },
+    { text: 'superpowers:brainstorming', sub: 'run by user' },
+    { text: 'plugin-authoring', sub: 'no reason given' },
   ])
   expect(commands!.items).toEqual([{ text: '/superpowers:brainstorming' }])
-  expect(counts(t)).toBe('스킬 2 · 커맨드 1')
+  expect(counts(t)).toBe('Skills 2 · Commands 1')
   expect(sections(one())).toEqual([])
 })
 
 test('timing: start → end · duration, or 진행 중', async () => {
   const at = new Date(2026, 10, 5, 14, 53, 2).getTime()
   let t = startTrace([], '질문', at)[0]!
-  expect(timing(t, true)).toBe('14:53:02 · 진행 중')
+  expect(timing(t, true)).toBe('14:53:02 · running')
   t = turnEnded(t, at + 169_000)
   expect(timing(t, true)).toBe('14:53:02 → 14:55:51 · 2m 49s')
   expect(timing(t, false)).toBe('14:53:02 · 2m 49s')
-  expect(timing(turnStarted(t), false)).toBe('14:53:02 · 진행 중')
+  expect(timing(turnStarted(t), false)).toBe('14:53:02 · running')
   expect(span(13_400)).toBe('13s')
   expect(span(3_725_000)).toBe('1h 2m')
   expect(timing(one(), true)).toBe('') // 시작 시각 없음(세션 시작 항목)
@@ -146,6 +146,6 @@ test('hook rows carry their source candidates; quiet ones are dim', async () => 
   expect(hooks).toMatchObject({ key: 'hook', count: 3 })
   expect(hooks!.items).toEqual([
     { text: 'SessionStart: PONYTAIL MODE ACTIVE', sub: '← context-mode' },
-    { text: 'PreToolUse ×2 (주입 없음)', sub: '← context-mode, settings', dim: true },
+    { text: 'PreToolUse ×2 (nothing injected)', sub: '← context-mode, settings', dim: true },
   ])
 })

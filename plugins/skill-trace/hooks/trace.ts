@@ -51,7 +51,7 @@ export const span = (ms: number): string => {
 /** 펼친 질문: 시작 → 끝 · 소요. 접힌 질문: 시작 · 소요. */
 export const timing = (t: Trace, full: boolean): string => {
   if (t.startedAt === undefined) return ''
-  if (t.endedAt === undefined) return `${clock(t.startedAt)} · 진행 중`
+  if (t.endedAt === undefined) return `${clock(t.startedAt)} · running`
   const took = span(t.endedAt - t.startedAt)
   return full ? `${clock(t.startedAt)} → ${clock(t.endedAt)} · ${took}` : `${clock(t.startedAt)} · ${took}`
 }
@@ -59,7 +59,7 @@ export const timing = (t: Trace, full: boolean): string => {
 export const title = (t: Trace): string => `Q${t.id} "${t.question}"`
 
 export const onLatest = (list: Trace[], fn: (t: Trace) => Trace): Trace[] => {
-  const base = list.length ? list : [blank(0, '(세션 시작)')]
+  const base = list.length ? list : [blank(0, '(session start)')]
   return [...base.slice(0, -1), fn(base[base.length - 1]!)]
 }
 
@@ -180,10 +180,10 @@ export const sections = (t: Trace, sources: Sources = {}): Section[] => {
   const byUser = (name: string) => t.commands.some(c => same(c.slice(1), name))
   const all: Section[] = [
     {
-      key: 'skill', title: '스킬', color: 'suggestion', count: t.skills.length,
+      key: 'skill', title: 'Skills', color: 'suggestion', count: t.skills.length,
       items: t.skills.map(s => ({
         text: `${s.name}${subTag(s.sub)}`,
-        sub: s.reason ?? (byUser(s.name) ? '사용자 실행' : '이유 미기재'),
+        sub: s.reason ?? (byUser(s.name) ? 'run by user' : 'no reason given'),
       })),
     },
     {
@@ -191,22 +191,22 @@ export const sections = (t: Trace, sources: Sources = {}): Section[] => {
       items: t.mcp.map(m => ({ text: `${m.server}: ${m.tool}${times(m.count)}${subTag(m.sub)}` })),
     },
     {
-      key: 'agent', title: '서브에이전트', color: 'planMode', count: sum(t.agents),
+      key: 'agent', title: 'Subagents', color: 'planMode', count: sum(t.agents),
       items: t.agents.map(a => ({ text: `${a.type}${times(a.count)}` })),
     },
     {
       // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.
-      key: 'hook', title: '훅', color: 'warning', count: sum(t.hooks),
+      key: 'hook', title: 'Hooks', color: 'warning', count: sum(t.hooks),
       items: [
         ...t.hooks.filter(h => h.head !== '').map(h => ({ text: `${h.event}: ${h.head}${times(h.count)}`, sub: from(h.event) })),
-        ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (주입 없음)`, sub: from(h.event), dim: true })),
+        ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (nothing injected)`, sub: from(h.event), dim: true })),
       ],
     },
-    { key: 'command', title: '커맨드', color: 'claude', count: t.commands.length, items: t.commands.map(text => ({ text })) },
+    { key: 'command', title: 'Commands', color: 'claude', count: t.commands.length, items: t.commands.map(text => ({ text })) },
   ]
   return all.filter(s => s.items.length > 0)
 }
 
 /** 접힌 질문 아래 한 줄 요약: "스킬 1 · MCP 6 · 훅 135". */
 export const counts = (t: Trace): string =>
-  sections(t).map(s => `${s.key === 'agent' ? '에이전트' : s.title} ${s.count}`).join(' · ')
+  sections(t).map(s => `${s.key === 'agent' ? 'Agents' : s.title} ${s.count}`).join(' · ')

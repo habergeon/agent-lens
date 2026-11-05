@@ -10,7 +10,7 @@ import {
 import type { Sources } from './trace'
 
 const PANE = 'skill-trace'
-const TITLE = '스킬 추적'
+const TITLE = 'Skill Trace'
 // Trace 필드가 바뀌면 태그를 올린다: 이전 버전이 저장한 값을 거절한다.
 const traces = atom({ plugin: 'skill-trace', key: 'traces' } as const, [] as Trace[], {
   shape: 'traces-1',
@@ -117,7 +117,7 @@ export const register: Register = (on, options) => {
     }
     await $.command.register({
       name: 'skill-trace',
-      description: '질문별로 쓰인 스킬·플러그인 기능 패널을 엽니다',
+      description: 'Open the pane listing the skills and plugin features each question used',
     })
     if (autoOpen) void $.ui.open({ id: PANE, title: TITLE })
     return next(e)
@@ -125,7 +125,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'skill-trace' }, async $ => {
     await $.ui.open({ id: PANE, title: TITLE })
-    return { text: '스킬 추적 패널을 열었습니다.' }
+    return { text: 'Skill Trace pane opened.' }
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -219,7 +219,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, traces)
-    if (list.length === 0) return <Text dimColor>아직 기록된 질문이 없습니다.</Text>
+    if (list.length === 0) return <Text dimColor>No questions recorded yet.</Text>
     const chosen = (await read($, open)) ?? list[list.length - 1]!.id
     const flipped = await read($, flip)
     const toggle = (k: string) => void update($, flip, ks => (ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]))
@@ -249,7 +249,7 @@ export const register: Register = (on, options) => {
               )}
               {isOpen && secs.length === 0 && (
                 <Box paddingLeft={2}>
-                  <Text dimColor>(스킬·플러그인 기능 사용 없음)</Text>
+                  <Text dimColor>(no skills or plugin features used)</Text>
                 </Box>
               )}
               {secs.map(s => {

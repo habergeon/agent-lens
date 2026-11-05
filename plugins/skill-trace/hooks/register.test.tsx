@@ -6,7 +6,7 @@ const PANE = {
   component: 'Pane',
   requestId: 'skill-trace',
   props: {
-    title: '스킬 추적',
+    title: 'Skill Trace',
     isFocused: false,
     bodyColumns: 60,
     placement: 'dock',
@@ -59,8 +59,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: 'mod API 확인 필요' })).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /context-mode: ctx_execute/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /Explore/ }))).toBeTruthy()
-    expect(await ui.find({ type: 'Button', text: /^▸ Q0 "\(세션 시작\)"/ })).toBeTruthy()
-    expect(await ui.find({ type: 'Text', text: '훅 1' })).toBeTruthy()
+    expect(await ui.find({ type: 'Button', text: /^▸ Q0 "\(session start\)"/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: 'Hooks 1' })).toBeTruthy()
     await ui.unmount()
   })
 }
@@ -123,12 +123,12 @@ test('질문 줄을 눌러 펼치고 접으며, 펼친 질문은 전체 텍스�
   await ui.unmount()
 })
 
-test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "사용자 실행"이 된다', async ($, on) => {
+test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "run by user"이 된다', async ($, on) => {
   engine(on)
   await $.prompt.submit({ text: '/superpowers:brainstorming 아이디어', command: { name: 'superpowers:brainstorming', args: '아이디어' } } as never)
   await $.skill.prompt({ skill: 'superpowers:brainstorming', text: '...', frontmatter: {}, source: 'plugin' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: '사용자 실행' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'run by user' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: '/superpowers:brainstorming' })).toBeTruthy()
   await ui.unmount()
 })
@@ -173,7 +173,7 @@ test('스킬로 이어지지 않는 슬래시 커맨드는 질문으로 기록�
   engine(on)
   await $.prompt.submit({ text: '/skill-trace', command: { name: 'skill-trace', args: '' } } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('아직 기록된 질문이 없습니다.')
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
   await ui.unmount()
 })
 
@@ -192,7 +192,7 @@ test('백그라운드·피어 프롬프트는 질문으로 기록되지 않는�
   engine(on)
   await $.prompt.submit({ text: '작업 끝', origin: { kind: 'task-notification' } } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('아직 기록된 질문이 없습니다.')
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
   await ui.unmount()
 })
 
@@ -251,10 +251,10 @@ test('메인 턴이 끝나면 질문의 시작·끝·소요 시간이 보인다'
   await $.prompt.submit({ text: '시간 확인' } as never)
   await $.turn.start({ text: '시간 확인', turnId: 't1' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /· 진행 중$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /· running$/ })).toBeTruthy()
   // 서브에이전트 턴의 끝은 질문의 끝이 아니다.
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 's1', agentId: 'a1', reason: 'answer' } as never)
-  expect(await ui.find({ type: 'Text', text: /· 진행 중$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /· running$/ })).toBeTruthy()
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
   expect(await ui.find({ type: 'Text', text: /^\d\d:\d\d:\d\d → \d\d:\d\d:\d\d · \d+s$/ })).toBeTruthy()
   await ui.unmount()
@@ -263,6 +263,6 @@ test('메인 턴이 끝나면 질문의 시작·끝·소요 시간이 보인다'
 test('기록이 없으면 안내 문구를 보인다', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('아직 기록된 질문이 없습니다.')
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
   await ui.unmount()
 })
