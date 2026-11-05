@@ -1,0 +1,14 @@
+{
+  "name": "agent-lens",
+  "owner": { "name": "juhanJoh", "url": "https://github.com/juhanJoh" },
+  "metadata": { "description": "Claude Code mods that show what the agent is doing and why." },
+  "plugins": [
+    {
+      "name": "skill-trace",
+      "source": "./plugins/skill-trace",
+      "description": "Mod: a side pane listing, per question, the skills Claude chose (with its reason) and the plugin features it used: MCP tools, subagents, hooks, slash commands.",
+      "version": "0.1.0",
+      "category": "mod"
+    }
+  ]
+}
