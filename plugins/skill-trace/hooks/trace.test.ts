@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Trace } from '../types'
 import {
-  MAX, addAgent, addTool, addCommand, addHook, addMcp, addSkill, addSource, commandName, counts, hookEvents, markSub,
+  MAX, addAgent, addTool, relative, addCommand, addHook, addMcp, addSkill, addSource, commandName, counts, hookEvents, markSub,
   onLatest, parseMcp, parseReasons, sections, settingsSources, span, startTrace, timing, title, turnEnded, turnStarted, withReason,
 } from './trace'
 
@@ -161,4 +161,19 @@ test('built-in tools are counted per name, subagent calls apart, in a Tools sect
   // 0.1.6 이전에 저장된 항목(tools 없음)도 그대로 그려진다.
   const { tools: _, ...old } = one()
   expect(sections(old as never)).toEqual([])
+})
+
+test('file tools keep the files they touched, shown relative to the working folder', async () => {
+  let t = addTool(one(), 'Edit', false, String.raw`C:\work\proj\hooks\register.tsx`)
+  t = addTool(t, 'Edit', false, 'C:/work/proj/hooks/register.tsx')
+  t = addTool(t, 'Edit', false, 'c:/work/proj/README.md')
+  t = addTool(t, 'Read', false, 'D:/elsewhere/notes.md')
+  t = addTool(t, 'Bash', false)
+  const tools = sections(t, {}, String.raw`C:\work\proj`)[0]!
+  expect(tools.items).toEqual([
+    { text: 'Edit ×3', lines: ['hooks/register.tsx ×2', 'README.md'] },
+    { text: 'Read', lines: ['D:/elsewhere/notes.md'] },
+    { text: 'Bash' },
+  ])
+  expect(relative('C:/work/proj/a.ts')).toBe('C:/work/proj/a.ts') // 작업 폴더를 모르면 그대로
 })

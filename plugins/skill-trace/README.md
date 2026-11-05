@@ -23,7 +23,7 @@ Claude가 질문마다 어떤 스킬을 왜 골랐는지, 어떤 플러그인 �
   - 스킬: 이름과 고른 이유. 사용자가 `/명령`으로 직접 실행한 스킬은 "run by user", 이유 줄이 없으면 "no reason given"
   - MCP: 서버(플러그인)·도구별 호출 횟수
   - 서브에이전트: 타입별 호출 횟수
-  - Tools: 기본 도구(Bash·Read·Edit …)의 도구별 호출 횟수. Skill·Agent·MCP 호출은 각자의 섹션에서 셉니다
+  - Tools: 기본 도구(Bash·Read·Edit …)의 도구별 호출 횟수. Read·Edit·Write·NotebookEdit 아래에는 다룬 파일을 세션 작업 폴더 기준 경로와 횟수로 나열합니다. Skill·Agent·MCP 호출은 각자의 섹션에서 셉니다
   - 훅: 훅 이벤트와 주입된 텍스트 첫 줄, 그리고 `← 출처 후보`(그 이벤트에 훅을 등록한 플러그인·settings 훅 명령 이름). 아무것도 주입하지 않고 실행만 된 훅은 `(nothing injected)` 으로 흐리게 표시
   - 커맨드: 실행한 슬래시 커맨드
   - 서브에이전트 안에서 일어난 스킬·MCP 호출은 `(sub)` 표시

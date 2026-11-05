@@ -3,7 +3,13 @@ export type McpUse = { server: string; tool: string; count: number; sub?: boolea
 export type AgentUse = { type: string; count: number }
 export type HookUse = { event: string; head: string; count: number }
 /** 기본 도구(Bash·Read·Edit …): MCP·Skill·Agent 는 각자의 섹션에서 센다. */
-export type ToolUse = { name: string; count: number; sub?: boolean }
+export type ToolUse = {
+  name: string
+  count: number
+  sub?: boolean
+  /** 파일을 받는 도구(Read·Edit·Write·NotebookEdit)가 다룬 파일: 절대 경로(/ 구분) → 횟수. */
+  files?: Record<string, number>
+}
 
 /** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
 export type Parked = { text: string; name: string }

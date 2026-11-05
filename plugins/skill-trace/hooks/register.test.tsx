@@ -289,3 +289,17 @@ test('기본 도구는 접힌 Tools 섹션에 횟수로 보이고, Skill·Agent�
   expect(await ui.find({ type: 'Text', text: /^Skill/ })).toBeFalsy()
   await ui.unmount()
 })
+
+test('Tools 항목 아래에 읽고 고친 파일이 작업 폴더 기준 경로로 보인다', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: String.raw`C:\work\proj`, surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: '파일 확인' } as never)
+  await $.tool.call({ tool: 'Read', file_path: String.raw`C:\work\proj\hooks\trace.ts` } as never)
+  await $.tool.call({ tool: 'Edit', file_path: String.raw`C:\work\proj\README.md`, old_string: 'a', new_string: 'b' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: String.raw`C:\work\proj\README.md`, old_string: 'b', new_string: 'c' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'b1:tool' })
+  expect(await ui.find({ type: 'Text', text: 'hooks/trace.ts' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'README.md ×2' })).toBeTruthy()
+  await ui.unmount()
+})

@@ -90,11 +90,13 @@ export const register: Register = (on, options) => {
   const autoOpen = options?.start !== 'off'
   const askReason = options?.reason !== 'off'
   let sources: Sources = {}
+  let cwd: string | undefined // 세션 작업 폴더: 파일 경로를 상대 경로로 보여 줄 때 쓴다
   // 진행 중인 Skill 호출: 스킬 이름 → 그 호출 안에서 skill.prompt 가 이미 기록했는지.
   const calling = new Map<string, boolean>()
 
   on('session.start', async ($, e, next) => {
     sources = await loadSources($)
+    cwd = e.cwd
     if (askReason) {
       await $.tool.register({
         name: 'reason',
@@ -177,7 +179,10 @@ export const register: Register = (on, options) => {
       const type = (e as { subagent_type?: string }).subagent_type ?? 'general-purpose'
       await latest($, t => addAgent(t, type))
     } else if (e.tool !== 'Skill' && !e.tool.startsWith('mcp__')) {
-      await latest($, t => addTool(t, e.tool, sub))
+      // 파일을 받는 도구: Read·Edit·Write 는 file_path, NotebookEdit 는 notebook_path.
+      const { file_path, notebook_path } = e as { file_path?: unknown; notebook_path?: unknown }
+      const file = typeof file_path === 'string' ? file_path : typeof notebook_path === 'string' ? notebook_path : undefined
+      await latest($, t => addTool(t, e.tool, sub, file))
     }
     // 같은 스킬을 다시 부르면 엔진이 본문을 다시 펼치지 않아 skill.prompt 가 안 올 수 있다:
     // 호출 동안 skill.prompt 가 기록하지 않았으면 여기서 기록한다(겹치면 한 번만).
@@ -233,7 +238,7 @@ export const register: Register = (on, options) => {
           const isOpen = chosen[String(t.id)] ?? t.id === newest
           const press = () => void update($, qopen, m => ({ ...m, [String(t.id)]: !isOpen }))
           const when = timing(t, isOpen)
-          const secs = isOpen ? sections(t, sources) : []
+          const secs = isOpen ? sections(t, sources, cwd) : []
           if (!isOpen) {
             return (
               <Box key={`t${t.id}`} flexDirection="column">
@@ -276,6 +281,13 @@ export const register: Register = (on, options) => {
                           <Box flexDirection="column" flexShrink={1}>
                             <Text wrap="wrap">{it.text}</Text>
                             {it.sub && <Text dimColor wrap="wrap">{it.sub}</Text>}
+                            {it.lines && (
+                              <Box flexDirection="column" paddingLeft={2}>
+                                {it.lines.map(l => (
+                                  <Text wrap="wrap">{l}</Text>
+                                ))}
+                              </Box>
+                            )}
                           </Box>
                         </Box>
                       ))}

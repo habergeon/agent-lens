@@ -112,12 +112,32 @@ export const addAgent = (t: Trace, type: string): Trace => {
   return { ...t, agents: [...t.agents, { type, count: 1 }] }
 }
 
+// 경로 표기를 하나로: 역슬래시 → 슬래시.
+export const slash = (p: string): string => p.replace(/\\/g, '/')
+
 // 기본 도구(Bash·Read·Edit …)는 이름별 횟수. 서브에이전트 안의 호출은 따로 센다.
-export const addTool = (t: Trace, name: string, sub: boolean): Trace => {
+// 파일을 받는 도구는 다룬 파일도 경로별 횟수로 남긴다.
+export const addTool = (t: Trace, name: string, sub: boolean, file?: string): Trace => {
   const tools = t.tools ?? []
+  const bump = (files: Record<string, number> | undefined) => {
+    if (!file) return files
+    const key = slash(file)
+    return { ...files, [key]: (files?.[key] ?? 0) + 1 }
+  }
   const i = tools.findIndex(x => x.name === name && (x.sub === true) === sub)
-  if (i >= 0) return { ...t, tools: tools.map((x, j) => (j === i ? { ...x, count: x.count + 1 } : x)) }
-  return { ...t, tools: [...tools, sub ? { name, count: 1, sub: true } : { name, count: 1 }] }
+  if (i >= 0) {
+    return { ...t, tools: tools.map((x, j) => (j === i ? { ...x, count: x.count + 1, files: bump(x.files) } : x)) }
+  }
+  const files = bump(undefined)
+  const fresh = { name, count: 1, ...(sub ? { sub: true } : {}), ...(files ? { files } : {}) }
+  return { ...t, tools: [...tools, fresh] }
+}
+
+// 작업 폴더 아래 파일은 상대 경로로(대소문자 무시: Windows 경로).
+export const relative = (path: string, cwd?: string): string => {
+  if (!cwd) return path
+  const base = slash(cwd).replace(/\/+$/, '') + '/'
+  return path.toLowerCase().startsWith(base.toLowerCase()) ? path.slice(base.length) : path
 }
 
 export const addHook = (t: Trace, event: string, text: string): Trace => {
@@ -175,15 +195,15 @@ export const addSource = (s: Sources, events: string[], who: string): Sources =>
   return out
 }
 
-/** 트리의 잎: 이름 줄과, 그 아래 들여 쓴 설명 줄(이유·출처 후보). */
-export type Item = { text: string; sub?: string }
+/** 트리의 잎: 이름 줄, 그 아래 흐린 설명 줄(이유·출처 후보), 더 들여 쓴 내용 줄(다룬 파일). */
+export type Item = { text: string; sub?: string; lines?: string[] }
 /** 트리의 가지: 질문 아래 섹션. key 는 접힘 상태를 기억하는 데 쓴다. */
 export type Section = { key: string; title: string; color: string; count: number; items: Item[] }
 
 const sum = (xs: { count: number }[]): number => xs.reduce((n, x) => n + x.count, 0)
 
 // 펼친 질문 아래의 섹션들(빈 섹션은 뺀다). 색은 터미널 테마 키.
-export const sections = (t: Trace, sources: Sources = {}): Section[] => {
+export const sections = (t: Trace, sources: Sources = {}, cwd?: string): Section[] => {
   // 엔진은 어느 플러그인의 훅이 돌았는지 mod 에 알려 주지 않는다: 그 이벤트에 훅을 등록한 곳을 "후보"로 붙인다.
   const from = (ev: string) => (sources[ev]?.length ? `← ${sources[ev]!.join(', ')}` : undefined)
   const byUser = (name: string) => t.commands.some(c => same(c.slice(1), name))
@@ -205,7 +225,10 @@ export const sections = (t: Trace, sources: Sources = {}): Section[] => {
     },
     {
       key: 'tool', title: 'Tools', color: 'success', count: sum(t.tools ?? []),
-      items: (t.tools ?? []).map(x => ({ text: `${x.name}${times(x.count)}${subTag(x.sub)}` })),
+      items: (t.tools ?? []).map(x => {
+        const files = Object.entries(x.files ?? {}).map(([p, n]) => `${relative(p, cwd)}${times(n)}`)
+        return { text: `${x.name}${times(x.count)}${subTag(x.sub)}`, ...(files.length ? { lines: files } : {}) }
+      }),
     },
     {
       // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.
