@@ -69,13 +69,13 @@ type Trace = {
 
 | 수집 대상 | 이벤트 | 처리 |
 |---|---|---|
-| 질문 | `prompt.submit` | 새 Trace를 만듭니다. `e.command`가 있으면 `commands`에 `/name`을 추가합니다. |
+| 질문 | `prompt.submit` | 새 Trace를 만듭니다. 슬래시 커맨드(`e.command`)는 바로 만들지 않고 보류했다가, 같은 이름의 `skill.prompt`가 오면 그때 질문으로 만들고 `commands`에 `/name`을 추가합니다. 백그라운드 알림·피어·예약 등 사람이 낸 것이 아닌 `origin`은 건너뜁니다. |
 | 스킬 | `skill.prompt` | `skills`에 `{ name: e.skill }`를 추가합니다. Skill 도구, `/명령`형 스킬, 미리 로드 경로가 모두 이 이벤트로 들어옵니다. |
-| 채택 이유 | `session.append`, `door: 'response'` | 텍스트 블록에서 `/^\[스킬근거\]\s*([^:]+):\s*(.+)$/m`에 맞는 줄을 찾아 해당 스킬과 짝을 맞춥니다. |
+| 채택 이유 | `session.append`, `door: 'response'` | 텍스트 블록에서 `/^[\s`*>\-•]*\[스킬근거\][*`]*\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm`에 맞는 줄을 찾아 해당 스킬과 짝을 맞춥니다. |
 | MCP 도구 | `tool.call`, 도구 이름이 `mcp__`로 시작 | `mcp__<server>__<tool>` 형식을 분해하고 `plugin_<p>_<s>`에서 `<p>`를 서버 표시 이름으로 씁니다. 같은 항목이면 `count`를 늘립니다. |
 | 서브에이전트 | `tool.call`, 도구 `Agent` | 입력의 `subagent_type`을 기록합니다. 값이 없으면 `general-purpose`로 둡니다. |
-| 훅 개입 | `session.append`, `door: 'hook-context'` | `origin.kind === 'hook'`이면 `origin` 이벤트 이름과 텍스트 첫 줄을 기록합니다. |
-| 서브에이전트 내부 | 위 이벤트 중 `agentId`가 있는 것 | 같은 Trace에 `sub: true`로 표시해 기록합니다. |
+| 훅 개입 | `session.append`, `door`가 `response`가 아님 | `origin.kind === 'hook'`이면 `origin` 이벤트 이름과 텍스트 첫 줄(`<system-reminder>` 태그와 `… hook additional context:` 접두어 제거 후)을 기록합니다. |
+| 서브에이전트 내부 | 스킬(`Skill` 도구 호출)과 MCP 도구 호출 중 `agentId`가 있는 것 | 같은 Trace에 `sub: true`로 표시해 기록합니다. |
 
 질문 없이 일어난 일(SessionStart 주입 등)은 `id: 0`, `question: "(세션 시작)"` 항목에 묶습니다.
 
@@ -112,4 +112,4 @@ type Trace = {
 4. 31번째 질문 → 가장 오래된 1건이 빠지는지
 5. 패널을 `terminal`과 `desktop` 두 화면에 각각 마운트했을 때 오류 없이 렌더링되는지
 
-검증 순서: `claude plugin validate` → `tsc -p plugins/skill-trace` → `claude plugin test`.
+검증 순서: `claude plugin validate` → `tsc` (tsconfig 는 엔진이 생성하고 gitignore 되므로 타입 정의 파일 머리말의 tsconfig 로 검사) → `claude plugin test`.
