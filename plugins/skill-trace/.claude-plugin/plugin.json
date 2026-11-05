@@ -1,6 +1,6 @@
 {
   "name": "skill-trace",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
@@ -19,6 +19,13 @@
       "type": "string",
       "title": "Ask for reasons",
       "description": "on: a reason tool (mcp__skill-trace__reason) is registered and Claude records { skill, reason } alongside each Skill call; the pane shows it. off: no tool or rule is added; skills show 'no reason given'.",
+      "default": "on",
+      "options": ["on", "off"]
+    },
+    "cost": {
+      "type": "string",
+      "title": "Track tokens and cost",
+      "description": "on: each question gets a Cost section with the model(s), the API-reported tokens and their list-price cost (Chat), plus the estimated share skill-trace added (rule, reason tool, reason calls). Works only while Ask for reasons is on; with reasons off it is off too. Prices are API list prices, not what a subscription bills.",
       "default": "on",
       "options": ["on", "off"]
     }

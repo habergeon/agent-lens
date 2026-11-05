@@ -11,6 +11,24 @@ export type ToolUse = {
   files?: Record<string, number>
 }
 
+/**
+ * 한 모델의 사용량과 비용(질문 하나 안에서). input…cacheWrite 는 API 가 알려 준 실제 토큰.
+ * cost 는 그 토큰의 API 정가 환산(가격을 모르는 모델이면 없음).
+ * mod* 는 그 가운데 skill-trace 가 더한 몫의 추정: 요청마다 따라간 규칙·도구 정의(modIn), 이유 호출의 출력(modOut).
+ */
+export type Spend = {
+  requests: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  cost?: number
+  modIn: number
+  modOut: number
+  modCalls: number
+  modCost?: number
+}
+
 /** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
 export type Parked = { text: string; name: string }
 
@@ -28,6 +46,8 @@ export type Trace = {
   agents: AgentUse[]
   /** 0.1.6 에 추가: 그 전에 저장된 항목에는 없다. */
   tools?: ToolUse[]
+  /** 0.2.0 에 추가(cost 옵션): 모델 id → 사용량·비용. */
+  spend?: Record<string, Spend>
   hooks: HookUse[]
   commands: string[]
   /** 스킬보다 먼저 도착한 이유: 스킬 이름 → 이유. 같은 이름의 스킬이 기록되면 소비된다. */

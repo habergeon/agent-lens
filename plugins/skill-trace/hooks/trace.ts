@@ -1,4 +1,4 @@
-import type { Trace } from '../types'
+import type { Spend, Trace } from '../types'
 
 export const MAX = 30
 
@@ -11,6 +11,65 @@ export const REASON_RULE =
   'Skill 도구를 호출할 때마다 같은 응답 안에서 `mcp__skill-trace__reason` 도구도 함께 호출해 ' +
   '{ skill: <Skill 에 넘긴 스킬명>, reason: <이 질문에 이 스킬을 고른 이유 한 줄> } 을 남긴다. ' +
   'skill-trace 패널이 이 값을 사용자에게 보여 준다.'
+
+/** 이유 기록 도구의 정의: 등록에 쓰고, 요청마다 따라가는 크기를 어림하는 데도 쓴다. */
+export const REASON_TOOL_SPEC = {
+  name: 'reason',
+  description:
+    'Record why you chose a skill, for the skill-trace pane. Call it in the same response as each Skill call, ' +
+    "with the same skill name and a one-line reason (in the user's language). Cheap and silent.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      skill: { type: 'string', description: 'The skill name exactly as passed to the Skill tool.' },
+      reason: { type: 'string', description: 'One line: why this skill fits this question.' },
+    },
+    required: ['skill', 'reason'],
+  },
+  isDeferred: false,
+} as const
+
+// 토큰 수 어림: ASCII 4자 ≈ 1토큰, 그 밖(한글 등) 1자 ≈ 1토큰. 실제 토크나이저가 아니라 추정이다.
+export const estimateTokens = (s: string): number => {
+  let n = 0
+  for (const ch of s) n += ch.charCodeAt(0) < 128 ? 0.25 : 1
+  return Math.ceil(n)
+}
+
+/** 요청마다 skill-trace 가 모델에 더해 보내는 토큰(규칙 단락 + 이유 도구 정의), 추정. */
+export const OVERHEAD_TOKENS = estimateTokens(REASON_RULE) + estimateTokens(JSON.stringify(REASON_TOOL_SPEC))
+
+// 가격($/MTok: 입력, 출력, 캐시 읽기, 캐시 쓰기). 출처: claude-api 스킬의 모델 표(2026-10-06 캐시).
+// 캐시 읽기는 입력의 0.1×(Fable 5.1 $0.25, Opus 5.5 $0.20), 쓰기는 사용량에 TTL 구분이 없어 1시간 TTL(2×)로 본다.
+// 구독 사용자는 토큰당 과금되지 않는다: 여기 금액은 API 정가 환산이다.
+type Price = readonly [number, number, number, number]
+const PRICES: readonly (readonly [RegExp, Price])[] = [
+  [/(fable|mythos)-5-1/, [10, 50, 0.25, 20]],
+  [/(fable|mythos)-5/, [10, 50, 1, 20]],
+  [/opus-5-5/, [4, 20, 0.2, 8]],
+  [/opus-(5|4-[678])/, [5, 25, 0.5, 10]],
+  [/sonnet-5/, [2, 10, 0.2, 4]],
+  [/sonnet-4-6/, [3, 15, 0.3, 6]],
+  [/haiku-5-5/, [0.1, 0.5, 0.01, 0.2]],
+  [/haiku-4-5/, [1, 5, 0.1, 2]],
+]
+// Haiku 5.5 는 프롬프트(입력+캐시 읽기+쓰기)가 100K 토큰을 넘는 요청에 이 가격을 받는다.
+const HAIKU_LONG: Price = [0.5, 2.5, 0.05, 1]
+
+export const priceOf = (model: string, prompt = 0): Price | undefined => {
+  const id = model.toLowerCase()
+  if (prompt > 100_000 && /haiku-5-5/.test(id)) return HAIKU_LONG
+  return PRICES.find(([re]) => re.test(id))?.[1]
+}
+
+/** API 가 요청마다 알려 주는 사용량. */
+export type RequestUsage = {
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
+}
 
 const REASON_LINE = /^[\s`*>\-•]*\[스킬근거\][*`]*\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm
 
@@ -133,6 +192,52 @@ export const addTool = (t: Trace, name: string, sub: boolean, file?: string): Tr
   return { ...t, tools: [...tools, fresh] }
 }
 
+const EMPTY_SPEND: Spend = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, modIn: 0, modOut: 0, modCalls: 0 }
+const withSpend = (t: Trace, model: string, fn: (s: Spend) => Spend): Trace => ({
+  ...t,
+  spend: { ...t.spend, [model]: fn(t.spend?.[model] ?? EMPTY_SPEND) },
+})
+const plus = (a: number | undefined, b: number | undefined): number | undefined =>
+  a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0)
+
+// 모델 요청 하나: API 가 알려 준 사용량을 그 요청의 가격으로 환산해 더한다.
+// overhead 는 그 요청에 skill-trace 가 더한 토큰(추정): 캐시에서 읽힌다고 보고 캐시 읽기 가격으로 센다.
+export const addRequest = (t: Trace, u: RequestUsage, overhead: number): Trace => {
+  const prompt = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+  const p = priceOf(u.model, prompt)
+  const cost = p
+    ? (u.input_tokens * p[0] + u.output_tokens * p[1] + u.cache_read_input_tokens * p[2] + u.cache_creation_input_tokens * p[3]) / 1e6
+    : undefined
+  const modCost = p ? (overhead * p[2]) / 1e6 : undefined
+  return withSpend(t, u.model, s => ({
+    ...s,
+    requests: s.requests + 1,
+    input: s.input + u.input_tokens,
+    output: s.output + u.output_tokens,
+    cacheRead: s.cacheRead + u.cache_read_input_tokens,
+    cacheWrite: s.cacheWrite + u.cache_creation_input_tokens,
+    cost: plus(s.cost, cost),
+    modIn: s.modIn + overhead,
+    modCost: plus(s.modCost, modCost),
+  }))
+}
+
+// 이유 기록 도구 호출 하나: 그 호출을 쓴 출력 토큰(추정)을 출력 가격으로 센다.
+export const addReasonCall = (t: Trace, model: string, outTokens: number): Trace => {
+  const p = priceOf(model)
+  return withSpend(t, model, s => ({
+    ...s,
+    modOut: s.modOut + outTokens,
+    modCalls: s.modCalls + 1,
+    modCost: plus(s.modCost, p ? (outTokens * p[1]) / 1e6 : undefined),
+  }))
+}
+
+export const money = (v: number): string =>
+  v === 0 ? '$0' : v >= 1 ? `$${v.toFixed(2)}` : v >= 0.01 ? `$${v.toFixed(3)}` : `$${v.toFixed(4)}`
+export const kilo = (n: number): string =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n)
+
 // 작업 폴더 아래 파일은 상대 경로로(대소문자 무시: Windows 경로).
 export const relative = (path: string, cwd?: string): string => {
   if (!cwd) return path
@@ -198,7 +303,8 @@ export const addSource = (s: Sources, events: string[], who: string): Sources =>
 /** 트리의 잎: 이름 줄, 그 아래 흐린 설명 줄(이유·출처 후보), 더 들여 쓴 내용 줄(다룬 파일). */
 export type Item = { text: string; sub?: string; lines?: string[] }
 /** 트리의 가지: 질문 아래 섹션. key 는 접힘 상태를 기억하는 데 쓴다. */
-export type Section = { key: string; title: string; color: string; count: number; items: Item[] }
+/** badge: 개수 대신 섹션 제목 옆에 보일 글자(Cost 의 금액). */
+export type Section = { key: string; title: string; color: string; count: number; badge?: string; items: Item[] }
 
 const sum = (xs: { count: number }[]): number => xs.reduce((n, x) => n + x.count, 0)
 
@@ -239,10 +345,39 @@ export const sections = (t: Trace, sources: Sources = {}, cwd?: string): Section
       ],
     },
     { key: 'command', title: 'Commands', color: 'claude', count: t.commands.length, items: t.commands.map(text => ({ text })) },
+    costSection(t),
   ]
   return all.filter(s => s.items.length > 0)
 }
 
+// 비용: Chat(API 가 알려 준 실제 사용량의 정가 환산, skill-trace 몫 포함)과 그 가운데 skill-trace 몫(추정).
+const costSection = (t: Trace): Section => {
+  const spend = Object.entries(t.spend ?? {})
+  const chat = spend.reduce((n, [, s]) => n + (s.cost ?? 0), 0)
+  const mod = spend.reduce((n, [, s]) => n + (s.modCost ?? 0), 0)
+  const unpriced = spend.filter(([, s]) => s.requests > 0 && s.cost === undefined).map(([m]) => m)
+  const calls = spend.reduce((n, [, s]) => n + s.modCalls, 0)
+  const modIn = spend.reduce((n, [, s]) => n + s.modIn, 0)
+  const modOut = spend.reduce((n, [, s]) => n + s.modOut, 0)
+  const items: Item[] = spend.length
+    ? [
+        {
+          text: `Chat ${money(chat)}`,
+          sub: `API-reported usage at list price${unpriced.length ? ` · price unknown: ${unpriced.join(', ')}` : ''}`,
+          lines: spend
+            .filter(([, s]) => s.requests > 0)
+            .map(([m, s]) =>
+              `${m} ×${s.requests} · in ${kilo(s.input)} · out ${kilo(s.output)} · cache read ${kilo(s.cacheRead)} · write ${kilo(s.cacheWrite)}`),
+        },
+        {
+          text: `skill-trace ${money(mod)} (est.)`,
+          sub: `share of Chat · ≈${kilo(modIn)} tok of rule + tool sent with requests · ${calls} reason call${calls === 1 ? '' : 's'} ≈${kilo(modOut)} out`,
+        },
+      ]
+    : []
+  return { key: 'cost', title: 'Cost', color: 'remember', count: spend.length, badge: spend.length ? money(chat) : undefined, items }
+}
+
 /** 접힌 질문 아래 한 줄 요약: "스킬 1 · MCP 6 · 훅 135". */
 export const counts = (t: Trace): string =>
-  sections(t).map(s => `${s.key === 'agent' ? 'Agents' : s.title} ${s.count}`).join(' · ')
+  sections(t).map(s => (s.badge ? s.badge : `${s.key === 'agent' ? 'Agents' : s.title} ${s.count}`)).join(' · ')

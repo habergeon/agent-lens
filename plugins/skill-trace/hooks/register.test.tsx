@@ -303,3 +303,40 @@ test('Tools 항목 아래에 읽고 고친 파일이 작업 폴더 기준 경로
   expect(await ui.find({ type: 'Text', text: 'README.md ×2' })).toBeTruthy()
   await ui.unmount()
 })
+
+const stepUsage = {
+  model: 'claude-opus-5-5', input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 100000, cache_creation_input_tokens: 5000,
+}
+const stepEngine = (on: On) => {
+  on('turn.step', async function* (_$, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: stepUsage } as never
+  })
+}
+const runStep = async ($: { turn: { step: (e: never) => AsyncIterable<unknown> } }) => {
+  for await (const chunk of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 } as never)) void chunk
+}
+
+test('모델 요청의 사용량이 Cost 섹션에 모델·토큰·금액으로 쌓인다', async ($, on) => {
+  engine(on)
+  stepEngine(on)
+  await $.prompt.submit({ text: '비용 확인' } as never)
+  await runStep($ as never)
+  await runStep($ as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'Chat $0.208' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^claude-opus-5-5 ×2 · in 2\.0k · out 4\.0k/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^skill-trace \$[\d.]+ \(est\.\)$/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+for (const options of [{ cost: 'off' }, { reason: 'off', cost: 'on' }] as const) {
+  test(`비용 기록 꺼짐: ${JSON.stringify(options)}`, { options }, async ($, on) => {
+    engine(on)
+    stepEngine(on)
+    await $.prompt.submit({ text: '비용 확인' } as never)
+    await runStep($ as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(await ui.find({ type: 'Text', text: /^Chat / })).toBeFalsy()
+    await ui.unmount()
+  })
+}

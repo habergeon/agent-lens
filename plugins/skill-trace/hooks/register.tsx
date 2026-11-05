@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Parked, Trace } from '../types'
 import {
-  REASON_RULE, REASON_TOOL, addAgent, addTool, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
+  OVERHEAD_TOKENS, REASON_RULE, REASON_TOOL, REASON_TOOL_SPEC, addAgent, addReasonCall, addRequest, addTool, estimateTokens, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
   hookEvents, markSub, onLatest, parseReasons, same, sections, settingsSources, startTrace, timing, title,
   turnEnded, turnStarted, withReason,
 } from './trace'
@@ -89,6 +89,9 @@ export const register: Register = (on, options) => {
   // userConfig: start(패널 자동 열기), reason(이유 규칙 주입). 기본은 둘 다 on.
   const autoOpen = options?.start !== 'off'
   const askReason = options?.reason !== 'off'
+  // cost: 토큰·비용 기록. reason 이 켜져 있을 때만 켤 수 있다(reason 이 꺼지면 함께 꺼짐).
+  const trackCost = askReason && options?.cost !== 'off'
+  let lastModel: string | undefined // 가장 최근 요청의 모델: 이유 호출의 출력을 그 모델 가격으로 센다
   let sources: Sources = {}
   let cwd: string | undefined // 세션 작업 폴더: 파일 경로를 상대 경로로 보여 줄 때 쓴다
   // 진행 중인 Skill 호출: 스킬 이름 → 그 호출 안에서 skill.prompt 가 이미 기록했는지.
@@ -98,21 +101,7 @@ export const register: Register = (on, options) => {
     sources = await loadSources($)
     cwd = e.cwd
     if (askReason) {
-      await $.tool.register({
-        name: 'reason',
-        description:
-          'Record why you chose a skill, for the skill-trace pane. Call it in the same response as each Skill call, ' +
-          'with the same skill name and a one-line reason (in the user\'s language). Cheap and silent.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            skill: { type: 'string', description: 'The skill name exactly as passed to the Skill tool.' },
-            reason: { type: 'string', description: 'One line: why this skill fits this question.' },
-          },
-          required: ['skill', 'reason'],
-        },
-        isDeferred: false,
-      })
+      await $.tool.register(REASON_TOOL_SPEC as never)
     }
     await $.command.register({
       name: 'skill-trace',
@@ -169,7 +158,24 @@ export const register: Register = (on, options) => {
       return { result: 'ignored: skill and reason are required' }
     }
     await latest($, t => withReason(t, skill.trim(), cut(reason, 80)))
+    if (trackCost && lastModel) {
+      // 이 호출을 쓴 출력: 인자 JSON + tool_use 블록 틀(≈20 토큰), 추정.
+      const out = estimateTokens(JSON.stringify({ skill, reason })) + 20
+      const model = lastModel
+      await latest($, t => addReasonCall(t, model, out))
+    }
     return { result: 'ok' }
+  })
+
+  // 모델 요청마다 API 가 알려 준 사용량을 기록한다(메인·서브에이전트 모두). 응답은 그대로 흘려보낸다.
+  on('turn.step', async function* ($, e, next) {
+    const r = yield* next(e)
+    if (trackCost && r.usage) {
+      const usage = r.usage
+      lastModel = usage.model
+      await latest($, t => addRequest(t, usage, OVERHEAD_TOKENS))
+    }
+    return r
   })
 
   on('tool.call', async ($, e, next) => {
@@ -272,7 +278,7 @@ export const register: Register = (on, options) => {
                   <Box key={`s${k}`} flexDirection="column" paddingLeft={1}>
                     <Button key={`b${k}`} plain onPress={() => toggle(k)}>
                       <Text color={s.color} bold>{`${shown ? '▾' : '▸'} ${s.title}`}</Text>
-                      <Text dimColor>{` ${s.count}`}</Text>
+                      <Text dimColor>{` ${s.badge ?? s.count}`}</Text>
                     </Button>
                     {shown &&
                       s.items.map((it, i) => (
