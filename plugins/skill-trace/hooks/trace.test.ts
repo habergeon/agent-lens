@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { Trace } from '../types'
 import {
-  MAX, addAgent, addCommand, addHook, addMcp, addSkill, addSource, commandName, detail, hookEvents, markSub,
-  onLatest, parseMcp, parseReasons, settingsSources, startTrace, summary, title, withReason,
+  MAX, addAgent, addCommand, addHook, addMcp, addSkill, addSource, commandName, counts, hookEvents, markSub,
+  onLatest, parseMcp, parseReasons, sections, settingsSources, span, startTrace, timing, title, turnEnded, turnStarted, withReason,
 } from './trace'
 
 const one = (q = '질문'): Trace => startTrace([], q)[0]!
@@ -86,17 +86,34 @@ test('markSub flags the newest skill of that name', async () => {
   expect(t.skills.map(s => s.sub === true)).toEqual([false, true])
 })
 
-test('detail shows fallbacks and summary counts', async () => {
+test('sections show fallbacks; counts summarise them', async () => {
   let t = addCommand(one('mod 검토해줘'), 'superpowers:brainstorming')
   t = addSkill(t, 'superpowers:brainstorming')
   t = addSkill(t, 'plugin-authoring')
-  const text = detail(t).map(l => l.text).join('\n')
   expect(title(t)).toBe('Q1 "mod 검토해줘"')
-  expect(text).toContain('superpowers:brainstorming — 사용자 실행')
-  expect(text).toContain('plugin-authoring — 이유 미기재')
-  expect(text).toContain('/superpowers:brainstorming')
-  expect(summary(t)).toBe('▸ Q1 "mod 검토해줘" · 스킬 2 · 커맨드 1')
-  expect(detail(one()).map(l => l.text)).toContain('  (스킬·플러그인 기능 사용 없음)')
+  const [skills, commands] = sections(t)
+  expect(skills).toMatchObject({ key: 'skill', title: '스킬', count: 2 })
+  expect(skills!.items).toEqual([
+    { text: 'superpowers:brainstorming', sub: '사용자 실행' },
+    { text: 'plugin-authoring', sub: '이유 미기재' },
+  ])
+  expect(commands!.items).toEqual([{ text: '/superpowers:brainstorming' }])
+  expect(counts(t)).toBe('스킬 2 · 커맨드 1')
+  expect(sections(one())).toEqual([])
+})
+
+test('timing: start → end · duration, or 진행 중', async () => {
+  const at = new Date(2026, 10, 5, 14, 53, 2).getTime()
+  let t = startTrace([], '질문', at)[0]!
+  expect(timing(t, true)).toBe('14:53:02 · 진행 중')
+  t = turnEnded(t, at + 169_000)
+  expect(timing(t, true)).toBe('14:53:02 → 14:55:51 · 2m 49s')
+  expect(timing(t, false)).toBe('14:53:02 · 2m 49s')
+  expect(timing(turnStarted(t), false)).toBe('14:53:02 · 진행 중')
+  expect(span(13_400)).toBe('13s')
+  expect(span(3_725_000)).toBe('1h 2m')
+  expect(timing(one(), true)).toBe('') // 시작 시각 없음(세션 시작 항목)
+  expect(turnEnded(onLatest([], x => x)[0]!, at).endedAt).toBe(undefined)
 })
 
 test('a long question keeps its full text; a short one does not', async () => {
@@ -125,7 +142,10 @@ test('hook rows carry their source candidates; quiet ones are dim', async () => 
 
   let t = addHook(one(), 'SessionStart', 'PONYTAIL MODE ACTIVE')
   t = addHook(addHook(t, 'PreToolUse', ''), 'PreToolUse', '')
-  const lines = detail(t, s)
-  expect(lines.find(l => l.text.includes('SessionStart'))).toEqual({ text: '  · SessionStart: PONYTAIL MODE ACTIVE ← context-mode' })
-  expect(lines.find(l => l.text.includes('PreToolUse'))).toEqual({ text: '  · PreToolUse ×2 (주입 없음) ← context-mode, settings', dim: true })
+  const [hooks] = sections(t, s)
+  expect(hooks).toMatchObject({ key: 'hook', count: 3 })
+  expect(hooks!.items).toEqual([
+    { text: 'SessionStart: PONYTAIL MODE ACTIVE', sub: '← context-mode' },
+    { text: 'PreToolUse ×2 (주입 없음)', sub: '← context-mode, settings', dim: true },
+  ])
 })

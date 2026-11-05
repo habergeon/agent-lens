@@ -12,6 +12,9 @@ export type Trace = {
   question: string
   /** 질문이 미리보기(40자)보다 길 때의 전체 텍스트(최대 2000자). 펼친 항목에서 보여 준다. */
   full?: string
+  /** 질문 시작 시각(ms). 메인 턴이 끝날 때마다 endedAt 이 갱신되고, 진행 중이면 비어 있다. */
+  startedAt?: number
+  endedAt?: number
   skills: SkillUse[]
   mcp: McpUse[]
   agents: AgentUse[]
@@ -24,6 +27,12 @@ export type Trace = {
 declare module 'claude-code' {
   interface PluginState {
     /** open: 펼친 질문 id. null 이면 최신 질문, -1 이면 모두 접힘. */
-    'skill-trace': { traces: Shaped<Trace[]>; parked: Shaped<Parked | null>; open: Shaped<number | null> }
+    /** flip: 기본 펼침 상태(훅만 접힘)를 사람이 뒤집은 섹션 키 `${질문 id}:${섹션 key}`. */
+    'skill-trace': {
+      traces: Shaped<Trace[]>
+      parked: Shaped<Parked | null>
+      open: Shaped<number | null>
+      flip: Shaped<string[]>
+    }
   }
 }

@@ -55,10 +55,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Button', text: /Q1 "mod 만들 수 있어\?"/ }))).toBeTruthy()
-    expect((await ui.find({ type: 'Text', text: /plugin-authoring — mod API 확인 필요/ }))).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: 'plugin-authoring' })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: 'mod API 확인 필요' })).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /context-mode: ctx_execute/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /Explore/ }))).toBeTruthy()
-    expect((await ui.find({ type: 'Button', text: /Q0 "\(세션 시작\)" · 훅 1/ }))).toBeTruthy()
+    expect(await ui.find({ type: 'Button', text: /^▸ Q0 "\(세션 시작\)"/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: '훅 1' })).toBeTruthy()
     await ui.unmount()
   })
 }
@@ -73,7 +75,8 @@ for (const order of ['reason-first', 'skill-first'] as const) {
     if (order === 'reason-first') { await reason(); await skill() } else { await skill(); await reason() }
 
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(await ui.find({ type: 'Text', text: /ponytail:ponytail-help — 부작용 없는 확인용/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: 'ponytail:ponytail-help' })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: '부작용 없는 확인용' })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: /skill-trace: reason/ })).toBeFalsy()
     await ui.unmount()
   })
@@ -125,8 +128,8 @@ test('슬래시 커맨드는 커맨드로 기록되고, 그 스킬은 "사용자
   await $.prompt.submit({ text: '/superpowers:brainstorming 아이디어', command: { name: 'superpowers:brainstorming', args: '아이디어' } } as never)
   await $.skill.prompt({ skill: 'superpowers:brainstorming', text: '...', frontmatter: {}, source: 'plugin' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /superpowers:brainstorming — 사용자 실행/ }))).toBeTruthy()
-  expect((await ui.find({ type: 'Text', text: /^  · \/superpowers:brainstorming$/ }))).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '사용자 실행' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '/superpowers:brainstorming' })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -181,7 +184,7 @@ test('슬래시 커맨드 뒤 다른 프롬프트가 오면 보류한 커맨드�
   await $.skill.prompt({ skill: 'model', text: '...', frontmatter: {}, source: 'built-in' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', text: /Q1 "진짜 질문"/ }))).toBeTruthy()
-  expect((await ui.find({ type: 'Text', text: /^  · \/model$/ }))).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: '/model' })).toBeFalsy()
   await ui.unmount()
 })
 
@@ -202,7 +205,58 @@ test('hook-context 가 아닌 door 의 훅 행도 훅으로 센다', async ($, o
     uuid: crypto.randomUUID(),
   } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /SessionStart: PONYTAIL MODE ACTIVE/ }))).toBeTruthy()
+  // 훅 섹션은 기본으로 접혀 있다: 섹션 줄을 눌러 펼친다.
+  expect(await ui.find({ type: 'Text', text: 'SessionStart: PONYTAIL MODE ACTIVE' })).toBeFalsy()
+  await ui.press({ key: 'b0:hook' })
+  expect(await ui.find({ type: 'Text', text: 'SessionStart: PONYTAIL MODE ACTIVE' })).toBeTruthy()
+  await ui.press({ key: 'b0:hook' })
+  expect(await ui.find({ type: 'Text', text: 'SessionStart: PONYTAIL MODE ACTIVE' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('Skill 호출은 skill.prompt 가 와도 안 와도 정확히 한 번 기록된다', async ($, on) => {
+  // 엔진 역할: expands 가 true 면 Skill 호출 안에서 skill.prompt 를 올린다(처음 펼칠 때),
+  // false 면 올리지 않는다(이미 불러온 스킬을 다시 부를 때).
+  let expands = true
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('skill.prompt', (_, e) => ({ text: e.text }))
+  on('tool.call', async (_$, e) => {
+    const skill = (e as { skill?: string }).skill
+    if (e.tool === 'Skill' && expands && skill) {
+      await $.skill.prompt({ skill, text: '...', frontmatter: {}, source: 'plugin' } as never)
+    }
+    return { result: {} }
+  })
+  const skillRows = async () => {
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const n = (await ui.findAll({ type: 'Text', text: 'ponytail:ponytail-help' })).length
+    await ui.unmount()
+    return n
+  }
+
+  await $.prompt.submit({ text: '처음 호출' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'ponytail:ponytail-help' } as never)
+  expect(await skillRows()).toBe(1)
+
+  expands = false
+  await $.prompt.submit({ text: '다시 호출' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'ponytail:ponytail-help' } as never)
+  expect(await skillRows()).toBe(1)
+})
+
+test('메인 턴이 끝나면 질문의 시작·끝·소요 시간이 보인다', async ($, on) => {
+  engine(on)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.prompt.submit({ text: '시간 확인' } as never)
+  await $.turn.start({ text: '시간 확인', turnId: 't1' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /· 진행 중$/ })).toBeTruthy()
+  // 서브에이전트 턴의 끝은 질문의 끝이 아니다.
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 's1', agentId: 'a1', reason: 'answer' } as never)
+  expect(await ui.find({ type: 'Text', text: /· 진행 중$/ })).toBeTruthy()
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  expect(await ui.find({ type: 'Text', text: /^\d\d:\d\d:\d\d → \d\d:\d\d:\d\d · \d+s$/ })).toBeTruthy()
   await ui.unmount()
 })
 

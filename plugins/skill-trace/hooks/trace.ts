@@ -23,13 +23,37 @@ const blank = (id: number, question: string): Trace => ({
   id, question, skills: [], mcp: [], agents: [], hooks: [], commands: [], pending: {},
 })
 
-export const startTrace = (list: Trace[], question: string): Trace[] => {
+export const startTrace = (list: Trace[], question: string, now?: number): Trace[] => {
   const id = (list.length ? list[list.length - 1]!.id : 0) + 1
   const short = cut(question, 40)
   const t = blank(id, short)
   // 미리보기가 잘렸을 때만 전체를 둔다(줄바꿈 유지).
   if (short.endsWith('…')) t.full = question.trim().slice(0, 2000)
+  if (now !== undefined) t.startedAt = now
   return [...list, t].slice(-MAX)
+}
+
+// 메인 턴이 시작하면 "진행 중", 끝나면 끝난 시각. 한 질문에 턴이 여럿이면 마지막 턴의 끝이 질문의 끝.
+export const turnStarted = (t: Trace): Trace => ({ ...t, endedAt: undefined })
+export const turnEnded = (t: Trace, now: number): Trace => (t.startedAt === undefined ? t : { ...t, endedAt: now })
+
+const pad = (n: number): string => String(n).padStart(2, '0')
+export const clock = (ms: number): string => {
+  const d = new Date(ms)
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+export const span = (ms: number): string => {
+  const s = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s % 60}s`
+}
+/** 펼친 질문: 시작 → 끝 · 소요. 접힌 질문: 시작 · 소요. */
+export const timing = (t: Trace, full: boolean): string => {
+  if (t.startedAt === undefined) return ''
+  if (t.endedAt === undefined) return `${clock(t.startedAt)} · 진행 중`
+  const took = span(t.endedAt - t.startedAt)
+  return full ? `${clock(t.startedAt)} → ${clock(t.endedAt)} · ${took}` : `${clock(t.startedAt)} · ${took}`
 }
 
 export const title = (t: Trace): string => `Q${t.id} "${t.question}"`
@@ -104,7 +128,6 @@ export const withReason = (t: Trace, name: string, reason: string): Trace => {
   return { ...t, pending: { ...t.pending, [name]: reason } }
 }
 
-export type Line = { text: string; bold?: boolean; dim?: boolean }
 
 const times = (n: number): string => (n > 1 ? ` ×${n}` : '')
 const subTag = (sub?: boolean): string => (sub ? ' (sub)' : '')
@@ -143,38 +166,47 @@ export const addSource = (s: Sources, events: string[], who: string): Sources =>
   return out
 }
 
-// 펼친 질문의 본문 줄(제목 줄은 패널이 버튼으로 그린다).
-export const detail = (t: Trace, sources: Sources = {}): Line[] => {
-  const out: Line[] = []
-  const section = (name: string, rows: Line[]) => {
-    if (rows.length === 0) return
-    out.push({ text: ` ${name}`, dim: true })
-    for (const r of rows) out.push({ ...r, text: `  · ${r.text}` })
-  }
-  const plain = (xs: string[]): Line[] => xs.map(text => ({ text }))
-  section('스킬', plain(t.skills.map(s => {
-    const why = s.reason ?? (t.commands.some(c => same(c.slice(1), s.name)) ? '사용자 실행' : '이유 미기재')
-    return `${s.name}${subTag(s.sub)} — ${why}`
-  })))
-  section('MCP', plain(t.mcp.map(m => `${m.server}: ${m.tool}${times(m.count)}${subTag(m.sub)}`)))
-  section('서브에이전트', plain(t.agents.map(a => `${a.type}${times(a.count)}`)))
+/** 트리의 잎: 이름 줄과, 그 아래 들여 쓴 설명 줄(이유·출처 후보). */
+export type Item = { text: string; sub?: string; dim?: boolean }
+/** 트리의 가지: 질문 아래 섹션. key 는 접힘 상태를 기억하는 데 쓴다. */
+export type Section = { key: string; title: string; color: string; count: number; items: Item[] }
+
+const sum = (xs: { count: number }[]): number => xs.reduce((n, x) => n + x.count, 0)
+
+// 펼친 질문 아래의 섹션들(빈 섹션은 뺀다). 색은 터미널 테마 키.
+export const sections = (t: Trace, sources: Sources = {}): Section[] => {
   // 엔진은 어느 플러그인의 훅이 돌았는지 mod 에 알려 주지 않는다: 그 이벤트에 훅을 등록한 곳을 "후보"로 붙인다.
-  // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.
-  const from = (ev: string) => (sources[ev]?.length ? ` ← ${sources[ev]!.join(', ')}` : '')
-  section('훅', [
-    ...t.hooks.filter(h => h.head !== '').map(h => ({ text: `${h.event}: ${h.head}${times(h.count)}${from(h.event)}` })),
-    ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (주입 없음)${from(h.event)}`, dim: true })),
-  ])
-  section('커맨드', plain(t.commands))
-  if (out.length === 0) out.push({ text: '  (스킬·플러그인 기능 사용 없음)', dim: true })
-  return out
+  const from = (ev: string) => (sources[ev]?.length ? `← ${sources[ev]!.join(', ')}` : undefined)
+  const byUser = (name: string) => t.commands.some(c => same(c.slice(1), name))
+  const all: Section[] = [
+    {
+      key: 'skill', title: '스킬', color: 'suggestion', count: t.skills.length,
+      items: t.skills.map(s => ({
+        text: `${s.name}${subTag(s.sub)}`,
+        sub: s.reason ?? (byUser(s.name) ? '사용자 실행' : '이유 미기재'),
+      })),
+    },
+    {
+      key: 'mcp', title: 'MCP', color: 'ide', count: sum(t.mcp),
+      items: t.mcp.map(m => ({ text: `${m.server}: ${m.tool}${times(m.count)}${subTag(m.sub)}` })),
+    },
+    {
+      key: 'agent', title: '서브에이전트', color: 'planMode', count: sum(t.agents),
+      items: t.agents.map(a => ({ text: `${a.type}${times(a.count)}` })),
+    },
+    {
+      // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.
+      key: 'hook', title: '훅', color: 'warning', count: sum(t.hooks),
+      items: [
+        ...t.hooks.filter(h => h.head !== '').map(h => ({ text: `${h.event}: ${h.head}${times(h.count)}`, sub: from(h.event) })),
+        ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (주입 없음)`, sub: from(h.event), dim: true })),
+      ],
+    },
+    { key: 'command', title: '커맨드', color: 'claude', count: t.commands.length, items: t.commands.map(text => ({ text })) },
+  ]
+  return all.filter(s => s.items.length > 0)
 }
 
-export const summary = (t: Trace): string => {
-  const sum = (xs: { count: number }[]) => xs.reduce((n, x) => n + x.count, 0)
-  const parts: [string, number][] = [
-    ['스킬', t.skills.length], ['MCP', sum(t.mcp)], ['에이전트', sum(t.agents)],
-    ['훅', sum(t.hooks)], ['커맨드', t.commands.length],
-  ]
-  return [`▸ Q${t.id} "${t.question}"`, ...parts.filter(([, n]) => n > 0).map(([k, n]) => `${k} ${n}`)].join(' · ')
-}
+/** 접힌 질문 아래 한 줄 요약: "스킬 1 · MCP 6 · 훅 135". */
+export const counts = (t: Trace): string =>
+  sections(t).map(s => `${s.key === 'agent' ? '에이전트' : s.title} ${s.count}`).join(' · ')

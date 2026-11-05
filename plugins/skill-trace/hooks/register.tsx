@@ -3,8 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Parked, Trace } from '../types'
 import {
-  REASON_RULE, REASON_TOOL, addAgent, cut, addCommand, addHook, addMcp, addSkill, detail,
-  addSource, hookEvents, markSub, settingsSources, onLatest, parseReasons, same, startTrace, summary, title, withReason,
+  REASON_RULE, REASON_TOOL, addAgent, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
+  hookEvents, markSub, onLatest, parseReasons, same, sections, settingsSources, startTrace, timing, title,
+  turnEnded, turnStarted, withReason,
 } from './trace'
 import type { Sources } from './trace'
 
@@ -30,6 +31,12 @@ const NOT_ASKED = new Set([
 const open = atom({ plugin: 'skill-trace', key: 'open' } as const, null as number | null, {
   shape: 'open-1',
 })
+
+// 기본 펼침 상태(훅 섹션만 접힘)를 사람이 뒤집은 섹션 키들.
+const flip = atom({ plugin: 'skill-trace', key: 'flip' } as const, [] as string[], {
+  shape: 'flip-1',
+})
+const FOLDED_BY_DEFAULT = new Set(['hook'])
 
 const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
   update($, traces, list => onLatest(list, fn))
@@ -86,6 +93,8 @@ export const register: Register = (on, options) => {
   const autoOpen = options?.start !== 'off'
   const askReason = options?.reason !== 'off'
   let sources: Sources = {}
+  // 진행 중인 Skill 호출: 스킬 이름 → 그 호출 안에서 skill.prompt 가 이미 기록했는지.
+  const calling = new Map<string, boolean>()
 
   on('session.start', async ($, e, next) => {
     sources = await loadSources($)
@@ -135,7 +144,7 @@ export const register: Register = (on, options) => {
         const hold = { text: e.text, name: e.command.name }
         await update($, parked, () => hold)
       } else {
-        await begin($, list => startTrace(list, e.text))
+        await begin($, list => startTrace(list, e.text, Date.now()))
       }
     }
     return next(e)
@@ -146,10 +155,11 @@ export const register: Register = (on, options) => {
     if (hold) {
       await update($, parked, () => null)
       if (same(hold.name, e.skill)) {
-        await begin($, list => onLatest(startTrace(list, hold.text), t => addCommand(t, hold.name)))
+        await begin($, list => onLatest(startTrace(list, hold.text, Date.now()), t => addCommand(t, hold.name)))
       }
     }
     await latest($, t => addSkill(t, e.skill))
+    for (const k of calling.keys()) if (same(k, e.skill)) calling.set(k, true)
     return next(e)
   })
 
@@ -170,12 +180,29 @@ export const register: Register = (on, options) => {
       const type = (e as { subagent_type?: string }).subagent_type ?? 'general-purpose'
       await latest($, t => addAgent(t, type))
     }
+    // 같은 스킬을 다시 부르면 엔진이 본문을 다시 펼치지 않아 skill.prompt 가 안 올 수 있다:
+    // 호출 동안 skill.prompt 가 기록하지 않았으면 여기서 기록한다(겹치면 한 번만).
+    // (같은 훅 안에서 next 뒤에 state 를 다시 읽으면 갱신이 안 보여서, 메모리 표시로 판단한다.)
+    const name = e.tool === 'Skill' ? (e as { skill?: unknown }).skill : undefined
+    if (typeof name === 'string' && name) calling.set(name, false)
     const ran = await next(e)
-    if (e.tool === 'Skill' && sub) {
-      const name = (e as { skill?: string }).skill
-      if (name) await latest($, t => markSub(t, name))
+    if (typeof name === 'string' && name) {
+      const recorded = calling.get(name) === true
+      calling.delete(name)
+      if (!recorded) await latest($, t => addSkill(t, name))
+      if (sub) await latest($, t => markSub(t, name))
     }
     return ran
+  })
+
+  // 질문의 시작은 prompt.submit 시각, 끝은 그 질문의 마지막 메인 턴이 끝난 시각.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) await latest($, turnStarted)
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) await latest($, t => turnEnded(t, Date.now()))
+    return next(e)
   })
 
   on('session.append', async ($, e, next) => {
@@ -194,22 +221,62 @@ export const register: Register = (on, options) => {
     const list = await read($, traces)
     if (list.length === 0) return <Text dimColor>아직 기록된 질문이 없습니다.</Text>
     const chosen = (await read($, open)) ?? list[list.length - 1]!.id
-    // 질문 줄을 누르면 펼치고, 펼친 질문을 다시 누르면 접는다.
+    const flipped = await read($, flip)
+    const toggle = (k: string) => void update($, flip, ks => (ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]))
+
+    // 트리: 질문(▾/▸) → 섹션(▾/▸, 색) → 항목(├/└) → 설명(들여 쓴 흐린 줄).
+    // 질문·섹션 줄을 누르면 펼치고 접는다. 설명은 이름 아래 같은 열에서 줄바꿈된다.
     return (
       <Box flexDirection="column">
-        {[...list].reverse().map(t =>
-          t.id === chosen ? (
-            <Box flexDirection="column">
-              <Button key={`q${t.id}`} plain label={`▾ ${title(t)}`} onPress={() => void update($, open, () => -1)} />
-              {t.full && <Text wrap="wrap">{t.full}</Text>}
-              {detail(t, sources).map(l => (
-                <Text bold={l.bold} dimColor={l.dim} wrap="wrap">{l.text}</Text>
-              ))}
+        {[...list].reverse().map(t => {
+          const isOpen = t.id === chosen
+          const meta = [timing(t, isOpen), isOpen ? '' : counts(t)].filter(Boolean).join(' · ')
+          const secs = isOpen ? sections(t, sources) : []
+          return (
+            <Box key={`t${t.id}`} flexDirection="column" marginBottom={isOpen ? 1 : 0}>
+              <Button key={`q${t.id}`} plain dimColor={!isOpen} onPress={() => void update($, open, () => (isOpen ? -1 : t.id))}>
+                <Text bold={isOpen}>{`${isOpen ? '▾' : '▸'} ${title(t)}`}</Text>
+              </Button>
+              {meta && (
+                <Box paddingLeft={2}>
+                  <Text dimColor wrap="wrap">{meta}</Text>
+                </Box>
+              )}
+              {isOpen && t.full && (
+                <Box paddingLeft={2}>
+                  <Text wrap="wrap">{t.full}</Text>
+                </Box>
+              )}
+              {isOpen && secs.length === 0 && (
+                <Box paddingLeft={2}>
+                  <Text dimColor>(스킬·플러그인 기능 사용 없음)</Text>
+                </Box>
+              )}
+              {secs.map(s => {
+                const k = `${t.id}:${s.key}`
+                const shown = FOLDED_BY_DEFAULT.has(s.key) === flipped.includes(k)
+                return (
+                  <Box key={`s${k}`} flexDirection="column" paddingLeft={1}>
+                    <Button key={`b${k}`} plain onPress={() => toggle(k)}>
+                      <Text color={s.color} bold>{`${shown ? '▾' : '▸'} ${s.title}`}</Text>
+                      <Text dimColor>{` ${s.count}`}</Text>
+                    </Button>
+                    {shown &&
+                      s.items.map((it, i) => (
+                        <Box key={`i${k}:${i}`} flexDirection="row" paddingLeft={2}>
+                          <Text dimColor>{i === s.items.length - 1 ? '└ ' : '├ '}</Text>
+                          <Box flexDirection="column" flexShrink={1}>
+                            <Text color={it.dim ? undefined : s.color} dimColor={it.dim} wrap="wrap">{it.text}</Text>
+                            {it.sub && <Text dimColor wrap="wrap">{it.sub}</Text>}
+                          </Box>
+                        </Box>
+                      ))}
+                  </Box>
+                )
+              })}
             </Box>
-          ) : (
-            <Button key={`q${t.id}`} plain dimColor label={summary(t)} onPress={() => void update($, open, () => t.id)} />
-          ),
-        )}
+          )
+        })}
       </Box>
     )
   })
