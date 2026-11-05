@@ -54,12 +54,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.tool.call({ tool: 'Agent', subagent_type: 'Explore', prompt: 'p', description: 'd' } as never)
 
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Button', text: /Q1 "mod 만들 수 있어\?"/ }))).toBeTruthy()
+    expect(await ui.find({ type: 'Button', text: /^▾ Q1 · \d\d:\d\d:\d\d · running$/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: /^mod 만들 수 있어\?$/ })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: 'plugin-authoring' })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: 'mod API 확인 필요' })).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /context-mode: ctx_execute/ }))).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /Explore/ }))).toBeTruthy()
-    expect(await ui.find({ type: 'Button', text: /^▸ Q0 "\(session start\)"/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Button', text: /^▸ Q0 \(session start\)$/ })).toBeTruthy()
     expect(await ui.find({ type: 'Text', text: 'Hooks 1' })).toBeTruthy()
     await ui.unmount()
   })
@@ -101,16 +102,17 @@ test('질문마다 펼침·접힘이 따로 유지되고(아코디언 아님), �
   await $.prompt.submit({ text: long } as never)
   await $.prompt.submit({ text: '두 번째 질문' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const shown = async (id: number) => Boolean(await ui.find({ type: 'Button', text: new RegExp(`^▾ Q${id} `) }))
+  const shown = async (id: number) => Boolean(await ui.find({ type: 'Button', text: new RegExp(`^▾ Q${id}(\\D|$)`) }))
+  const exact = (s: string) => new RegExp(`^${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
 
   // 처음엔 최신(Q2)만 펼쳐지고 Q1 은 접힌 한 줄.
   expect([await shown(2), await shown(1)]).toEqual([true, false])
-  expect(await ui.find({ type: 'Text', text: long })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: exact(long) })).toBeFalsy()
 
   // Q1 을 펼쳐도 Q2 는 그대로 펼쳐져 있다.
   await ui.press({ key: 'q1' })
   expect([await shown(2), await shown(1)]).toEqual([true, true])
-  expect(await ui.find({ type: 'Text', text: long })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: exact(long) })).toBeTruthy()
 
   // Q2 를 접어도 Q1 은 그대로.
   await ui.press({ key: 'q2' })
@@ -186,7 +188,7 @@ test('슬래시 커맨드 뒤 다른 프롬프트가 오면 보류한 커맨드�
   await $.prompt.submit({ text: '진짜 질문' } as never)
   await $.skill.prompt({ skill: 'model', text: '...', frontmatter: {}, source: 'built-in' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Button', text: /Q1 "진짜 질문"/ }))).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: /^진짜 질문$/ }))).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: '/model' })).toBeFalsy()
   await ui.unmount()
 })
@@ -259,7 +261,7 @@ test('메인 턴이 끝나면 질문의 시작·끝·소요 시간이 보인다'
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 's1', agentId: 'a1', reason: 'answer' } as never)
   expect(await ui.find({ type: 'Text', text: /· running$/ })).toBeTruthy()
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
-  expect(await ui.find({ type: 'Text', text: /^\d\d:\d\d:\d\d → \d\d:\d\d:\d\d · \d+s$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /\d\d:\d\d:\d\d → \d\d:\d\d:\d\d · \d+s$/ })).toBeTruthy()
   await ui.unmount()
 })
 

@@ -25,10 +25,11 @@ const blank = (id: number, question: string): Trace => ({
 
 export const startTrace = (list: Trace[], question: string, now?: number): Trace[] => {
   const id = (list.length ? list[list.length - 1]!.id : 0) + 1
-  const short = cut(question, 40)
+  // question: 한 줄로 편 질문(접힌 줄에 쓰고, 패널 폭에서 … 으로 잘린다).
+  // full: 줄바꿈이 있거나 한 줄 상한을 넘을 때만 원문(펼친 질문 본문에 쓴다).
+  const short = cut(question, 300)
   const t = blank(id, short)
-  // 미리보기가 잘렸을 때만 전체를 둔다(줄바꿈 유지).
-  if (short.endsWith('…')) t.full = question.trim().slice(0, 2000)
+  if (short !== question.trim()) t.full = question.trim().slice(0, 2000)
   if (now !== undefined) t.startedAt = now
   return [...list, t].slice(-MAX)
 }
@@ -56,7 +57,7 @@ export const timing = (t: Trace, full: boolean): string => {
   return full ? `${clock(t.startedAt)} → ${clock(t.endedAt)} · ${took}` : `${clock(t.startedAt)} · ${took}`
 }
 
-export const title = (t: Trace): string => `Q${t.id} "${t.question}"`
+export const title = (t: Trace): string => `Q${t.id} ${t.question}`
 
 export const onLatest = (list: Trace[], fn: (t: Trace) => Trace): Trace[] => {
   const base = list.length ? list : [blank(0, '(session start)')]
@@ -175,7 +176,7 @@ export const addSource = (s: Sources, events: string[], who: string): Sources =>
 }
 
 /** 트리의 잎: 이름 줄과, 그 아래 들여 쓴 설명 줄(이유·출처 후보). */
-export type Item = { text: string; sub?: string; dim?: boolean }
+export type Item = { text: string; sub?: string }
 /** 트리의 가지: 질문 아래 섹션. key 는 접힘 상태를 기억하는 데 쓴다. */
 export type Section = { key: string; title: string; color: string; count: number; items: Item[] }
 
@@ -211,7 +212,7 @@ export const sections = (t: Trace, sources: Sources = {}): Section[] => {
       key: 'hook', title: 'Hooks', color: 'warning', count: sum(t.hooks),
       items: [
         ...t.hooks.filter(h => h.head !== '').map(h => ({ text: `${h.event}: ${h.head}${times(h.count)}`, sub: from(h.event) })),
-        ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)} (nothing injected)`, sub: from(h.event), dim: true })),
+        ...t.hooks.filter(h => h.head === '').map(h => ({ text: `${h.event}${times(h.count)}`, sub: ['nothing injected', from(h.event)].filter(Boolean).join(' · ') })),
       ],
     },
     { key: 'command', title: 'Commands', color: 'claude', count: t.commands.length, items: t.commands.map(text => ({ text })) },

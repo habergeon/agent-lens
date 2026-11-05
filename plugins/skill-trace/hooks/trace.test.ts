@@ -15,10 +15,11 @@ test('startTrace numbers questions and keeps the last 30', async () => {
   expect(list[MAX - 1]!.id).toBe(MAX + 1)
 })
 
-test('startTrace cuts the question to 40 chars on one line', async () => {
+test('startTrace flattens the question to one line (the pane truncates it by width), capped at 300', async () => {
   const t = one('가'.repeat(50) + '\n둘째 줄')
-  expect(t.question.length).toBe(40)
-  expect(t.question.endsWith('…')).toBe(true)
+  expect(t.question).toBe('가'.repeat(50) + ' 둘째 줄')
+  expect(one('나'.repeat(400)).question.length).toBe(300)
+  expect(one('나'.repeat(400)).question.endsWith('…')).toBe(true)
 })
 
 test('onLatest makes a "(session start)" trace when none exists', async () => {
@@ -90,7 +91,7 @@ test('sections show fallbacks; counts summarise them', async () => {
   let t = addCommand(one('mod 검토해줘'), 'superpowers:brainstorming')
   t = addSkill(t, 'superpowers:brainstorming')
   t = addSkill(t, 'plugin-authoring')
-  expect(title(t)).toBe('Q1 "mod 검토해줘"')
+  expect(title(t)).toBe('Q1 mod 검토해줘')
   const [skills, commands] = sections(t)
   expect(skills).toMatchObject({ key: 'skill', title: 'Skills', count: 2 })
   expect(skills!.items).toEqual([
@@ -119,7 +120,7 @@ test('timing: start → end · duration, or 진행 중', async () => {
 test('a long question keeps its full text; a short one does not', async () => {
   const long = '그누보드랑 php 사용하는녀석들을 PC에 보관 했던거지?\n대상과 명세 기준에 접속 방법 등을 정리해서 알려줄래?'
   expect(one(long).full).toBe(long)
-  expect(one(long).question.length).toBe(40)
+  expect(one(long).question).toBe(long.replace('\n', ' '))
   expect(one('짧은 질문').full).toBe(undefined)
 })
 
@@ -134,7 +135,7 @@ test('settings hooks are named by their command', async () => {
   } })).toEqual({ PreToolUse: ['a', 'b'], Stop: ['a'] })
 })
 
-test('hook rows carry their source candidates; quiet ones are dim', async () => {
+test('hook rows carry their source candidates; quiet ones say so in the sub line', async () => {
   let s = addSource({}, hookEvents({ hooks: { PreToolUse: [], SessionStart: [] } }), 'context-mode')
   s = addSource(s, hookEvents({ hooks: { PreToolUse: [] } }), 'settings')
   s = addSource(s, hookEvents({ modules: ['./register.tsx'] }), 'some-mod')
@@ -146,7 +147,7 @@ test('hook rows carry their source candidates; quiet ones are dim', async () => 
   expect(hooks).toMatchObject({ key: 'hook', count: 3 })
   expect(hooks!.items).toEqual([
     { text: 'SessionStart: PONYTAIL MODE ACTIVE', sub: '← context-mode' },
-    { text: 'PreToolUse ×2 (nothing injected)', sub: '← context-mode, settings', dim: true },
+    { text: 'PreToolUse ×2', sub: 'nothing injected · ← context-mode, settings' },
   ])
 })
 

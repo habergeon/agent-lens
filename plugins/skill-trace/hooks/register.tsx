@@ -224,29 +224,37 @@ export const register: Register = (on, options) => {
     const flipped = await read($, flip)
     const toggle = (k: string) => void update($, flip, ks => (ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]))
 
-    // 트리: 질문(▾/▸) → 섹션(▾/▸, 색) → 항목(├/└) → 설명(들여 쓴 흐린 줄).
-    // 질문·섹션 줄을 누르면 펼치고 접는다. 설명은 이름 아래 같은 열에서 줄바꿈된다.
+    // 트리: 질문(▾/▸) → 섹션(▾/▸) → 항목(├/└) → 설명(들여 쓴 흐린 줄).
+    // 대비 규칙: 질문·항목은 기본 글자색, 색은 섹션 제목에만, 흐림(dim)은 메타(시각·개수·출처)에만.
+    // 접힌 질문은 한 줄로 패널 폭에서 … 으로 자르고, 펼친 질문은 머리줄에 번호·시간, 본문에 질문 전체.
     return (
       <Box flexDirection="column">
         {[...list].reverse().map(t => {
           const isOpen = chosen[String(t.id)] ?? t.id === newest
-          const meta = [timing(t, isOpen), isOpen ? '' : counts(t)].filter(Boolean).join(' · ')
+          const press = () => void update($, qopen, m => ({ ...m, [String(t.id)]: !isOpen }))
+          const when = timing(t, isOpen)
           const secs = isOpen ? sections(t, sources) : []
+          if (!isOpen) {
+            return (
+              <Box key={`t${t.id}`} flexDirection="column">
+                <Button key={`q${t.id}`} plain onPress={press}>
+                  <Text wrap="truncate-end">{`▸ ${title(t)}`}</Text>
+                </Button>
+                <Box paddingLeft={2}>
+                  <Text dimColor wrap="truncate-end">{[when, counts(t)].filter(Boolean).join(' · ')}</Text>
+                </Box>
+              </Box>
+            )
+          }
           return (
-            <Box key={`t${t.id}`} flexDirection="column" marginBottom={isOpen ? 1 : 0}>
-              <Button key={`q${t.id}`} plain dimColor={!isOpen} onPress={() => void update($, qopen, m => ({ ...m, [String(t.id)]: !isOpen }))}>
-                <Text bold={isOpen}>{`${isOpen ? '▾' : '▸'} ${title(t)}`}</Text>
+            <Box key={`t${t.id}`} flexDirection="column" marginBottom={1}>
+              <Button key={`q${t.id}`} plain onPress={press}>
+                <Text bold>{`▾ Q${t.id}`}</Text>
+                {when ? <Text dimColor>{` · ${when}`}</Text> : null}
               </Button>
-              {meta && (
-                <Box paddingLeft={2}>
-                  <Text dimColor wrap="wrap">{meta}</Text>
-                </Box>
-              )}
-              {isOpen && t.full && (
-                <Box paddingLeft={2}>
-                  <Text wrap="wrap">{t.full}</Text>
-                </Box>
-              )}
+              <Box paddingLeft={2} marginBottom={secs.length ? 1 : 0}>
+                <Text wrap="wrap">{t.full ?? t.question}</Text>
+              </Box>
               {isOpen && secs.length === 0 && (
                 <Box paddingLeft={2}>
                   <Text dimColor>(no skills or plugin features used)</Text>
@@ -266,7 +274,7 @@ export const register: Register = (on, options) => {
                         <Box key={`i${k}:${i}`} flexDirection="row" paddingLeft={2}>
                           <Text dimColor>{i === s.items.length - 1 ? '└ ' : '├ '}</Text>
                           <Box flexDirection="column" flexShrink={1}>
-                            <Text color={it.dim ? undefined : s.color} dimColor={it.dim} wrap="wrap">{it.text}</Text>
+                            <Text wrap="wrap">{it.text}</Text>
                             {it.sub && <Text dimColor wrap="wrap">{it.sub}</Text>}
                           </Box>
                         </Box>
