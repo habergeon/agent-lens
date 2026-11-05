@@ -53,17 +53,17 @@ claude-mods/
 type Trace = {
   id: number;              // 질문 순번 (1부터, "(세션 시작)" 항목은 0)
   question: string;        // 사용자 질문 앞부분 (최대 40자)
-  at: number;              // 질문 시각 (ms)
   skills: { name: string; reason?: string; sub?: boolean }[];
   mcp: { server: string; tool: string; count: number; sub?: boolean }[];
   agents: { type: string; count: number }[];
-  hooks: { event: string; head: string }[];   // head: 주입 텍스트 첫 줄 30자
+  hooks: { event: string; head: string; count: number }[];   // head: 주입 텍스트 첫 줄 30자. PreToolUse 팁처럼 반복되는 주입은 count로 합침
   commands: string[];                          // "/name"
+  pending: Record<string, string>;             // 스킬보다 먼저 온 이유 (질문이 바뀌면 함께 버려짐)
 };
-// $.state 키: skill-trace.traces: Trace[] (최근 30건), skill-trace.pendingReasons: Record<string, string>
+// $.state 키: skill-trace.traces: Trace[] (최근 30건) 하나
 ```
 
-이유 줄은 스킬 호출보다 먼저 도착할 수 있습니다. 그래서 짝이 없는 이유는 `pendingReasons`에 이름을 키로 잠시 보관하고, 같은 이름의 스킬이 기록되면 그때 붙입니다. 반대로 스킬이 먼저 기록된 상태에서 이유가 도착하면, 아직 이유가 없는 같은 이름의 스킬 중 가장 최근 것에 붙입니다.
+이유 줄은 스킬 호출보다 먼저 도착할 수 있습니다. 그래서 짝이 없는 이유는 그 Trace의 `pending`에 이름을 키로 잠시 보관하고, 같은 이름의 스킬이 기록되면 그때 붙입니다. 반대로 스킬이 먼저 기록된 상태에서 이유가 도착하면, 아직 이유가 없는 같은 이름의 스킬 중 가장 최근 것에 붙입니다.
 
 ## 수집: 이벤트별 처리
 
@@ -94,12 +94,12 @@ type Trace = {
 - `ui.render` 훅의 `{ component: 'Pane', requestId: 'skill-trace' }`에서 `traces` atom을 읽어 그립니다.
 - 가장 최근 Trace를 맨 위에 펼쳐서 보여 주고, 내용이 있는 칸만 스킬, MCP, 서브에이전트, 훅, 커맨드 순서로 그립니다.
 - 이전 Trace는 `▸ Q{id} "{question}" · 스킬 n · MCP n` 한 줄로 접어 둡니다.
-- 이유가 없는 스킬은 "이유 미기재", 커맨드는 "사용자 실행", 훅은 "훅 자동 주입 ({event})"으로 표시합니다.
+- 이유가 없는 스킬은 "이유 미기재", 같은 질문에서 `/명령`으로 직접 실행된 스킬은 "사용자 실행"으로 표시합니다. 훅은 `{event}: {첫 줄}` 형태로 보여 줍니다.
 - 긴 텍스트는 말줄임표로 자릅니다.
 
 ## 예외 처리
 
-- 수집 훅은 모두 `const r = await next(e)`를 먼저 호출한 다음 기록하고 `r`을 돌려줍니다. 기록 단계에서 예외가 나도 본래 동작에는 영향이 없습니다. 이 mod는 관찰만 하므로 아무것도 막지 않습니다.
+- 수집 훅은 기록을 **`next(e)` 앞에서** 합니다. `next`가 서브에이전트 실행이나 턴 전체를 감쌀 수 있어서, 뒤에서 기록하면 순서가 뒤바뀌기 때문입니다. 기록 중에 예외가 나면 엔진이 그 훅만 건너뛰고 체인을 계속 진행하므로 본래 동작에는 영향이 없습니다. 이 mod는 관찰만 하므로 아무것도 막거나 바꾸지 않습니다.
 - 정규식과 맞지 않는 응답은 무시합니다.
 - 최근 30건만 보관합니다.
 - 다시 로드돼도 `$.state`는 유지됩니다. 모듈 안의 변수에는 아무것도 저장하지 않습니다.
