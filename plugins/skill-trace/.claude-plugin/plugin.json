@@ -1,11 +1,27 @@
 {
   "name": "skill-trace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
   "homepage": "https://github.com/habergeon/agent-lens/tree/main/plugins/skill-trace",
   "repository": "https://github.com/habergeon/agent-lens",
   "keywords": ["skills", "trace", "mod", "pane"],
+  "userConfig": {
+    "start": {
+      "type": "string",
+      "title": "Open at start",
+      "description": "on: the 스킬 추적 pane opens when a session starts. off: it stays closed until you run /skill-trace.",
+      "default": "on",
+      "options": ["on", "off"]
+    },
+    "reason": {
+      "type": "string",
+      "title": "Ask for reasons",
+      "description": "on: Claude writes a one-line `[스킬근거] <skill>: <reason>` before each Skill call, and the pane shows it. off: no rule is added and no such lines appear in chat; skills show 이유 미기재.",
+      "default": "on",
+      "options": ["on", "off"]
+    }
+  },
   "license": "MIT"
 }

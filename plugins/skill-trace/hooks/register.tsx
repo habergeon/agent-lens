@@ -31,13 +31,17 @@ const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
 const textOf = (blocks: readonly { type: string; [k: string]: unknown }[]): string =>
   blocks.filter(b => b.type === 'text').map(b => String(b.text ?? '')).join('\n')
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // userConfig: start(패널 자동 열기), reason(이유 규칙 주입). 기본은 둘 다 on.
+  const autoOpen = options?.start !== 'off'
+  const askReason = options?.reason !== 'off'
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'skill-trace',
       description: '질문별로 쓰인 스킬·플러그인 기능 패널을 엽니다',
     })
-    void $.ui.open({ id: PANE, title: TITLE })
+    if (autoOpen) void $.ui.open({ id: PANE, title: TITLE })
     return next(e)
   })
 
@@ -48,7 +52,7 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    if (e.surfaces.length === 0 || !e.tools.includes('Skill')) return r
+    if (!askReason || e.surfaces.length === 0 || !e.tools.includes('Skill')) return r
     return {
       ...r,
       sections: [...r.sections, { id: 'skill-trace-reason', text: REASON_RULE, scope: 'session' as const }],

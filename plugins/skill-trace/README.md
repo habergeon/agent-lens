@@ -11,6 +11,22 @@ Claude가 질문마다 어떤 스킬을 왜 골랐는지, 어떤 플러그인 �
   - 서브에이전트 안에서 일어난 스킬·MCP 호출은 `(sub)` 표시
 - **이유 규칙**: 시스템 프롬프트에 한 섹션을 더해, Claude가 Skill 도구를 부르기 직전 `[스킬근거] <스킬명>: <이유>` 한 줄을 쓰게 합니다. 이 줄은 채팅에도 보입니다.
 
+## 설정
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `start` | `on` | `off` 면 세션 시작 때 패널을 열지 않습니다. `/skill-trace` 로 열 때만 보입니다. |
+| `reason` | `on` | `off` 면 `[스킬근거]` 규칙을 넣지 않아 채팅에 그 줄이 나오지 않습니다. 대신 스킬 이유는 "이유 미기재"로 보입니다. |
+
+`/config` 메뉴에서 바꾸거나, 터미널에서 설정합니다.
+
+```
+claude plugin configure skill-trace@agent-lens
+claude plugin install skill-trace@agent-lens --scope user --config start=off
+```
+
+mod 전체를 켜고 끄려면 `claude plugin disable skill-trace@agent-lens --scope user` / `enable` 를 씁니다.
+
 ## 한계
 
 - 이유는 모델의 자기 보고입니다. 실제 판단 과정의 기록이 아닙니다.

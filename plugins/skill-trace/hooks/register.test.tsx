@@ -16,9 +16,12 @@ const PANE = {
 } as const
 
 // 플러그인 아래에는 아무것도 없다: 이 훅들이 엔진 역할을 한다.
-const engine = (on: On) => {
+const engine = (on: On, opened: string[] = []) => {
   on('command.register', () => ({ value: { command: 'skill-trace' } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', (_$, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('skill.prompt', (_, e) => ({ text: e.text }))
@@ -79,6 +82,23 @@ test('prompt.compose 에 이유 규칙 섹션이 맨 끝에 붙는다', async ($
   expect(last.scope).toBe('session')
   expect(last.text).toContain('[스킬근거]')
 })
+
+test('reason=off 면 이유 규칙을 붙이지 않는다', { options: { reason: 'off' } }, async ($, on) => {
+  engine(on)
+  const r = await $.prompt.compose({
+    model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: ['Skill'], outputStyle: null, traits: [],
+  })
+  expect(r.sections.some(x => x.id === 'skill-trace-reason')).toBe(false)
+})
+
+for (const [start, opens] of [['on', true], ['off', false]] as const) {
+  test(`start=${start} 이면 세션 시작 때 패널을 ${opens ? '연다' : '열지 않는다'}`, { options: { start } }, async ($, on) => {
+    const opened: string[] = []
+    engine(on, opened)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    expect(opened.includes('skill-trace')).toBe(opens)
+  })
+}
 
 test('Skill 도구가 없는 루프에는 이유 규칙을 붙이지 않는다', async ($, on) => {
   engine(on)
