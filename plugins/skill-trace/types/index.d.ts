@@ -2,6 +2,8 @@ export type SkillUse = { name: string; reason?: string; sub?: boolean }
 export type McpUse = { server: string; tool: string; count: number; sub?: boolean }
 export type AgentUse = { type: string; count: number }
 export type HookUse = { event: string; head: string; count: number }
+/** 기본 도구(Bash·Read·Edit …): MCP·Skill·Agent 는 각자의 섹션에서 센다. */
+export type ToolUse = { name: string; count: number; sub?: boolean }
 
 /** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
 export type Parked = { text: string; name: string }
@@ -18,6 +20,8 @@ export type Trace = {
   skills: SkillUse[]
   mcp: McpUse[]
   agents: AgentUse[]
+  /** 0.1.6 에 추가: 그 전에 저장된 항목에는 없다. */
+  tools?: ToolUse[]
   hooks: HookUse[]
   commands: string[]
   /** 스킬보다 먼저 도착한 이유: 스킬 이름 → 이유. 같은 이름의 스킬이 기록되면 소비된다. */

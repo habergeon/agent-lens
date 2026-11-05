@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Parked, Trace } from '../types'
 import {
-  REASON_RULE, REASON_TOOL, addAgent, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
+  REASON_RULE, REASON_TOOL, addAgent, addTool, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
   hookEvents, markSub, onLatest, parseReasons, same, sections, settingsSources, startTrace, timing, title,
   turnEnded, turnStarted, withReason,
 } from './trace'
@@ -36,7 +36,7 @@ const open = atom({ plugin: 'skill-trace', key: 'open' } as const, null as numbe
 const flip = atom({ plugin: 'skill-trace', key: 'flip' } as const, [] as string[], {
   shape: 'flip-1',
 })
-const FOLDED_BY_DEFAULT = new Set(['hook'])
+const FOLDED_BY_DEFAULT = new Set(['tool', 'hook'])
 
 const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
   update($, traces, list => onLatest(list, fn))
@@ -179,6 +179,8 @@ export const register: Register = (on, options) => {
     if (e.tool === 'Agent') {
       const type = (e as { subagent_type?: string }).subagent_type ?? 'general-purpose'
       await latest($, t => addAgent(t, type))
+    } else if (e.tool !== 'Skill' && !e.tool.startsWith('mcp__')) {
+      await latest($, t => addTool(t, e.tool, sub))
     }
     // 같은 스킬을 다시 부르면 엔진이 본문을 다시 펼치지 않아 skill.prompt 가 안 올 수 있다:
     // 호출 동안 skill.prompt 가 기록하지 않았으면 여기서 기록한다(겹치면 한 번만).

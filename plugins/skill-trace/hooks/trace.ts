@@ -111,6 +111,14 @@ export const addAgent = (t: Trace, type: string): Trace => {
   return { ...t, agents: [...t.agents, { type, count: 1 }] }
 }
 
+// 기본 도구(Bash·Read·Edit …)는 이름별 횟수. 서브에이전트 안의 호출은 따로 센다.
+export const addTool = (t: Trace, name: string, sub: boolean): Trace => {
+  const tools = t.tools ?? []
+  const i = tools.findIndex(x => x.name === name && (x.sub === true) === sub)
+  if (i >= 0) return { ...t, tools: tools.map((x, j) => (j === i ? { ...x, count: x.count + 1 } : x)) }
+  return { ...t, tools: [...tools, sub ? { name, count: 1, sub: true } : { name, count: 1 }] }
+}
+
 export const addHook = (t: Trace, event: string, text: string): Trace => {
   const body = text.replace(/<\/?system-reminder>/g, '').replace(/^\s*\w+ hook additional context:\s*/, '')
   const head = cut(body.split('\n').find(l => l.trim() !== '') ?? '', 30)
@@ -193,6 +201,10 @@ export const sections = (t: Trace, sources: Sources = {}): Section[] => {
     {
       key: 'agent', title: 'Subagents', color: 'planMode', count: sum(t.agents),
       items: t.agents.map(a => ({ text: `${a.type}${times(a.count)}` })),
+    },
+    {
+      key: 'tool', title: 'Tools', color: 'success', count: sum(t.tools ?? []),
+      items: (t.tools ?? []).map(x => ({ text: `${x.name}${times(x.count)}${subTag(x.sub)}` })),
     },
     {
       // 내용을 주입한 훅이 먼저, 실행만 한 훅(주입 없음)은 흐리게 뒤에.

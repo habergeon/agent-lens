@@ -266,3 +266,21 @@ test('기록이 없으면 안내 문구를 보인다', async ($, on) => {
   expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
   await ui.unmount()
 })
+
+test('기본 도구는 접힌 Tools 섹션에 횟수로 보이고, Skill·Agent·MCP 는 섞이지 않는다', async ($, on) => {
+  engine(on)
+  await $.prompt.submit({ text: '도구 확인' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'pwd' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/a' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'x:y' } as never)
+  await $.tool.call({ tool: 'mcp__plugin_context-mode_context-mode__ctx_search' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Button', text: /Tools 3/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Bash ×2' })).toBeFalsy() // 기본으로 접힘
+  await ui.press({ key: 'b1:tool' })
+  expect(await ui.find({ type: 'Text', text: 'Bash ×2' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Read' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^Skill/ })).toBeFalsy()
+  await ui.unmount()
+})

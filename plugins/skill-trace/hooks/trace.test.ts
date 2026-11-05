@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Trace } from '../types'
 import {
-  MAX, addAgent, addCommand, addHook, addMcp, addSkill, addSource, commandName, counts, hookEvents, markSub,
+  MAX, addAgent, addTool, addCommand, addHook, addMcp, addSkill, addSource, commandName, counts, hookEvents, markSub,
   onLatest, parseMcp, parseReasons, sections, settingsSources, span, startTrace, timing, title, turnEnded, turnStarted, withReason,
 } from './trace'
 
@@ -148,4 +148,16 @@ test('hook rows carry their source candidates; quiet ones are dim', async () => 
     { text: 'SessionStart: PONYTAIL MODE ACTIVE', sub: '← context-mode' },
     { text: 'PreToolUse ×2 (nothing injected)', sub: '← context-mode, settings', dim: true },
   ])
+})
+
+test('built-in tools are counted per name, subagent calls apart, in a Tools section', async () => {
+  let t = addTool(addTool(one(), 'Bash', false), 'Bash', false)
+  t = addTool(addTool(t, 'Read', false), 'Bash', true)
+  const tools = sections(t).find(s => s.key === 'tool')
+  expect(tools).toMatchObject({ title: 'Tools', count: 4 })
+  expect(tools!.items).toEqual([{ text: 'Bash ×2' }, { text: 'Read' }, { text: 'Bash (sub)' }])
+  expect(counts(t)).toBe('Tools 4')
+  // 0.1.6 이전에 저장된 항목(tools 없음)도 그대로 그려진다.
+  const { tools: _, ...old } = one()
+  expect(sections(old as never)).toEqual([])
 })
