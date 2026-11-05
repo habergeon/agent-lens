@@ -27,9 +27,10 @@ const NOT_ASKED = new Set([
   'channel', 'coordinator', 'observer', 'observer-activity', 'auto-continuation',
 ])
 
-// 펼친 질문 id. null: 최신 질문을 따라감, -1: 모두 접힘.
-const open = atom({ plugin: 'skill-trace', key: 'open' } as const, null as number | null, {
-  shape: 'open-1',
+// 질문마다 사람이 정한 펼침 상태(질문 id → 펼침). 정하지 않은 질문은 최신만 펼침.
+// 질문끼리는 서로 영향을 주지 않는다(아코디언이 아님).
+const qopen = atom({ plugin: 'skill-trace', key: 'qopen' } as const, {} as Record<string, boolean>, {
+  shape: 'qopen-1',
 })
 
 // 기본 펼침 상태(훅 섹션만 접힘)를 사람이 뒤집은 섹션 키들.
@@ -41,11 +42,7 @@ const FOLDED_BY_DEFAULT = new Set(['tool', 'hook'])
 const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
   update($, traces, list => onLatest(list, fn))
 
-// 새 질문이 생기면 펼침 상태를 최신 질문으로 되돌린다.
-const begin = async ($: EngineInterface, fn: (list: Trace[]) => Trace[]) => {
-  await update($, traces, fn)
-  await update($, open, () => null)
-}
+const begin = ($: EngineInterface, fn: (list: Trace[]) => Trace[]) => update($, traces, fn)
 
 // 훅 출처 후보: settings 의 hooks(명령 이름으로)와, 켜진 플러그인마다 등록한 훅 이벤트(플러그인 이름으로).
 // 플러그인의 훅 파일은 plugin.json 의 hooks(경로·경로 목록·인라인)가 있으면 그것, 없으면 hooks/hooks.json.
@@ -222,7 +219,8 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, traces)
     if (list.length === 0) return <Text dimColor>No questions recorded yet.</Text>
-    const chosen = (await read($, open)) ?? list[list.length - 1]!.id
+    const newest = list[list.length - 1]!.id
+    const chosen = await read($, qopen)
     const flipped = await read($, flip)
     const toggle = (k: string) => void update($, flip, ks => (ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]))
 
@@ -231,12 +229,12 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {[...list].reverse().map(t => {
-          const isOpen = t.id === chosen
+          const isOpen = chosen[String(t.id)] ?? t.id === newest
           const meta = [timing(t, isOpen), isOpen ? '' : counts(t)].filter(Boolean).join(' · ')
           const secs = isOpen ? sections(t, sources) : []
           return (
             <Box key={`t${t.id}`} flexDirection="column" marginBottom={isOpen ? 1 : 0}>
-              <Button key={`q${t.id}`} plain dimColor={!isOpen} onPress={() => void update($, open, () => (isOpen ? -1 : t.id))}>
+              <Button key={`q${t.id}`} plain dimColor={!isOpen} onPress={() => void update($, qopen, m => ({ ...m, [String(t.id)]: !isOpen }))}>
                 <Text bold={isOpen}>{`${isOpen ? '▾' : '▸'} ${title(t)}`}</Text>
               </Button>
               {meta && (

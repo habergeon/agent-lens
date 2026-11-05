@@ -1,6 +1,6 @@
 {
   "name": "skill-trace",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",

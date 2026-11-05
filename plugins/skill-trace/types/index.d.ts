@@ -30,12 +30,12 @@ export type Trace = {
 
 declare module 'claude-code' {
   interface PluginState {
-    /** open: 펼친 질문 id. null 이면 최신 질문, -1 이면 모두 접힘. */
+    /** qopen: 질문 id → 사람이 정한 펼침 상태. 없으면 최신 질문만 펼침. */
     /** flip: 기본 펼침 상태(훅만 접힘)를 사람이 뒤집은 섹션 키 `${질문 id}:${섹션 key}`. */
     'skill-trace': {
       traces: Shaped<Trace[]>
       parked: Shaped<Parked | null>
-      open: Shaped<number | null>
+      qopen: Shaped<Record<string, boolean>>
       flip: Shaped<string[]>
     }
   }

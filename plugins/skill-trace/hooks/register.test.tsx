@@ -95,31 +95,34 @@ test('reason=off 면 이유 도구를 등록하지 않는다', { options: { reas
   expect(tools).toEqual([])
 })
 
-test('질문 줄을 눌러 펼치고 접으며, 펼친 질문은 전체 텍스트를 보인다', async ($, on) => {
+test('질문마다 펼침·접힘이 따로 유지되고(아코디언 아님), 펼친 질문은 전체 텍스트를 보인다', async ($, on) => {
   engine(on)
   const long = '그누보드랑 php 사용하는녀석들을 PC에 보관 했던거지? 대상과 명세 기준에 접속 방법 등을 정리해서 알려줄래?'
   await $.prompt.submit({ text: long } as never)
   await $.prompt.submit({ text: '두 번째 질문' } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const shown = async (id: number) => Boolean(await ui.find({ type: 'Button', text: new RegExp(`^▾ Q${id} `) }))
 
-  // 처음엔 최신(Q2)이 펼쳐지고 Q1 은 접힌 한 줄.
-  expect(await ui.find({ type: 'Button', text: /^▾ Q2/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Button', text: /^▸ Q1/ })).toBeTruthy()
+  // 처음엔 최신(Q2)만 펼쳐지고 Q1 은 접힌 한 줄.
+  expect([await shown(2), await shown(1)]).toEqual([true, false])
   expect(await ui.find({ type: 'Text', text: long })).toBeFalsy()
 
-  // Q1 을 누르면 Q1 이 펼쳐지고 전체 질문이 보인다.
+  // Q1 을 펼쳐도 Q2 는 그대로 펼쳐져 있다.
   await ui.press({ key: 'q1' })
-  expect(await ui.find({ type: 'Button', text: /^▾ Q1/ })).toBeTruthy()
+  expect([await shown(2), await shown(1)]).toEqual([true, true])
   expect(await ui.find({ type: 'Text', text: long })).toBeTruthy()
-  expect(await ui.find({ type: 'Button', text: /^▸ Q2/ })).toBeTruthy()
 
-  // 펼친 Q1 을 다시 누르면 모두 접힌다.
-  await ui.press({ key: 'q1' })
-  expect(await ui.find({ type: 'Button', text: /^▾/ })).toBeFalsy()
+  // Q2 를 접어도 Q1 은 그대로.
+  await ui.press({ key: 'q2' })
+  expect([await shown(2), await shown(1)]).toEqual([false, true])
 
-  // 새 질문이 오면 다시 최신이 펼쳐진다.
+  // 새 질문(Q3)은 펼쳐지고, 사람이 정한 Q2(접힘)·Q1(펼침)은 그대로 남는다.
   await $.prompt.submit({ text: '세 번째' } as never)
-  expect(await ui.find({ type: 'Button', text: /^▾ Q3/ })).toBeTruthy()
+  expect([await shown(3), await shown(2), await shown(1)]).toEqual([true, false, true])
+
+  // 손대지 않은 Q3 은 다음 질문이 오면 기본대로 접힌다.
+  await $.prompt.submit({ text: '네 번째' } as never)
+  expect([await shown(4), await shown(3)]).toEqual([true, false])
   await ui.unmount()
 })
 
