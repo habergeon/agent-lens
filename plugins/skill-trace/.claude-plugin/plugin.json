@@ -1,6 +1,6 @@
 {
   "name": "skill-trace",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Side pane: per question, the skills Claude chose and why, plus the MCP tools, subagents, hooks and slash commands it used.",
   "author": { "name": "habergeon", "url": "https://github.com/habergeon" },
   "types": "./types/index.d.ts",
@@ -18,7 +18,7 @@
     "reason": {
       "type": "string",
       "title": "Ask for reasons",
-      "description": "on: Claude writes a one-line `[스킬근거] <skill>: <reason>` before each Skill call, and the pane shows it. off: no rule is added and no such lines appear in chat; skills show 이유 미기재.",
+      "description": "on: a reason tool (mcp__skill-trace__reason) is registered and Claude records { skill, reason } alongside each Skill call; the pane shows it. off: no tool or rule is added; skills show 이유 미기재.",
       "default": "on",
       "options": ["on", "off"]
     }

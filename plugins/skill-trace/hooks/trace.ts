@@ -2,10 +2,15 @@ import type { Trace } from '../types'
 
 export const MAX = 30
 
+/** mod 가 등록하는 이유 기록 도구: 모델에는 `mcp__skill-trace__reason` 으로 보인다. */
+export const REASON_TOOL = 'mcp__skill-trace__reason'
+
+// 도구 호출 직전의 본문은 요약된 narration(thinking)으로 저장돼 이유 줄이 사라지므로,
+// 이유는 Skill 과 같은 응답에서 부르는 도구 인자로 받는다.
 export const REASON_RULE =
-  'Skill 도구를 호출하기 직전, 응답 본문에 다음 형식의 한 줄을 쓴다: ' +
-  '`[스킬근거] <스킬명>: <이 질문에 이 스킬을 고른 이유 한 줄>`. ' +
-  '이 줄은 skill-trace 패널이 읽어 사용자에게 보여 준다.'
+  'Skill 도구를 호출할 때마다 같은 응답 안에서 `mcp__skill-trace__reason` 도구도 함께 호출해 ' +
+  '{ skill: <Skill 에 넘긴 스킬명>, reason: <이 질문에 이 스킬을 고른 이유 한 줄> } 을 남긴다. ' +
+  'skill-trace 패널이 이 값을 사용자에게 보여 준다.'
 
 const REASON_LINE = /^[\s`*>\-•]*\[스킬근거\][*`]*\s*(\S+?)\s*:\s+(.+?)`?\s*$/gm
 

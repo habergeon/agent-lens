@@ -18,6 +18,7 @@ const PANE = {
 // 플러그인 아래에는 아무것도 없다: 이 훅들이 엔진 역할을 한다.
 const engine = (on: On, opened: string[] = []) => {
   on('command.register', () => ({ value: { command: 'skill-trace' } }))
+  on('tool.register', (_$, e) => ({ value: { tool: `mcp__skill-trace__${e.name}` } }))
   on('ui.open', (_$, e) => {
     opened.push(e.id)
     return { value: { isPlaced: true } }
@@ -61,6 +62,35 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
+
+for (const order of ['reason-first', 'skill-first'] as const) {
+  test(`이유 도구(${order})의 값이 스킬에 붙고, MCP 목록에는 나오지 않는다`, async ($, on) => {
+    engine(on)
+    await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+    await $.prompt.submit({ text: '패널 확인' } as never)
+    const reason = () => $.tool.call({ tool: 'mcp__skill-trace__reason', skill: 'ponytail:ponytail-help', reason: '부작용 없는 확인용' } as never)
+    const skill = () => $.skill.prompt({ skill: 'ponytail:ponytail-help', text: '...', frontmatter: {}, source: 'plugin' } as never)
+    if (order === 'reason-first') { await reason(); await skill() } else { await skill(); await reason() }
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    expect(await ui.find({ type: 'Text', text: /ponytail:ponytail-help — 부작용 없는 확인용/ })).toBeTruthy()
+    expect(await ui.find({ type: 'Text', text: /skill-trace: reason/ })).toBeFalsy()
+    await ui.unmount()
+  })
+}
+
+test('reason=off 면 이유 도구를 등록하지 않는다', { options: { reason: 'off' } }, async ($, on) => {
+  const tools: string[] = []
+  on('command.register', () => ({ value: { command: 'skill-trace' } }))
+  on('tool.register', (_$, e) => {
+    tools.push(e.name)
+    return { value: { tool: `mcp__skill-trace__${e.name}` } }
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(tools).toEqual([])
+})
 
 test('질문 줄을 눌러 펼치고 접으며, 펼친 질문은 전체 텍스트를 보인다', async ($, on) => {
   engine(on)
@@ -108,7 +138,7 @@ test('prompt.compose 에 이유 규칙 섹션이 맨 끝에 붙는다', async ($
   const last = r.sections[r.sections.length - 1]!
   expect(last.id).toBe('skill-trace-reason')
   expect(last.scope).toBe('session')
-  expect(last.text).toContain('[스킬근거]')
+  expect(last.text).toContain('mcp__skill-trace__reason')
 })
 
 test('reason=off 면 이유 규칙을 붙이지 않는다', { options: { reason: 'off' } }, async ($, on) => {

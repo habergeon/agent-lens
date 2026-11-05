@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Parked, Trace } from '../types'
 import {
-  REASON_RULE, addAgent, addCommand, addHook, addMcp, addSkill, detail,
+  REASON_RULE, REASON_TOOL, addAgent, cut, addCommand, addHook, addMcp, addSkill, detail,
   addSource, hookEvents, markSub, settingsSources, onLatest, parseReasons, same, startTrace, summary, title, withReason,
 } from './trace'
 import type { Sources } from './trace'
@@ -89,6 +89,23 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     sources = await loadSources($)
+    if (askReason) {
+      await $.tool.register({
+        name: 'reason',
+        description:
+          'Record why you chose a skill, for the skill-trace pane. Call it in the same response as each Skill call, ' +
+          'with the same skill name and a one-line reason (in the user\'s language). Cheap and silent.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            skill: { type: 'string', description: 'The skill name exactly as passed to the Skill tool.' },
+            reason: { type: 'string', description: 'One line: why this skill fits this question.' },
+          },
+          required: ['skill', 'reason'],
+        },
+        isDeferred: false,
+      })
+    }
     await $.command.register({
       name: 'skill-trace',
       description: '질문별로 쓰인 스킬·플러그인 기능 패널을 엽니다',
@@ -136,9 +153,19 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // 이유 기록 도구: 엔진 아래로 내려보내지 않고 여기서 답한다.
+  on('tool.call', { tool: REASON_TOOL }, async ($, e) => {
+    const { skill, reason } = e as { skill?: unknown; reason?: unknown }
+    if (typeof skill !== 'string' || typeof reason !== 'string' || !skill.trim() || !reason.trim()) {
+      return { result: 'ignored: skill and reason are required' }
+    }
+    await latest($, t => withReason(t, skill.trim(), cut(reason, 80)))
+    return { result: 'ok' }
+  })
+
   on('tool.call', async ($, e, next) => {
     const sub = e.agentId !== undefined
-    if (e.tool.startsWith('mcp__')) await latest($, t => addMcp(t, e.tool, sub))
+    if (e.tool.startsWith('mcp__') && e.tool !== REASON_TOOL) await latest($, t => addMcp(t, e.tool, sub))
     if (e.tool === 'Agent') {
       const type = (e as { subagent_type?: string }).subagent_type ?? 'general-purpose'
       await latest($, t => addAgent(t, type))
