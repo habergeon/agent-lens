@@ -47,6 +47,8 @@ export type Trace = {
   /** 질문 시작 시각(ms). 메인 턴이 끝날 때마다 endedAt 이 갱신되고, 진행 중이면 비어 있다. */
   startedAt?: number
   endedAt?: number
+  /** 0.4.0 에 추가: 질문 프롬프트가 대화에 저장된 행의 id. 패널에서 대화 창의 그 줄로 스크롤할 때 쓴다. */
+  msg?: string
   skills: SkillUse[]
   mcp: McpUse[]
   agents: AgentUse[]

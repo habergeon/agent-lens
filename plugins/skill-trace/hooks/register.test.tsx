@@ -382,3 +382,39 @@ test('두 번째 질문(스킬·이유 호출 포함)에도 비용이 쌓인다'
   expect(await ui.find({ type: 'Text', text: /^claude-opus-5-5 ×1 / })).toBeTruthy()
   await ui.unmount()
 })
+
+const asked = (text: string, uuid: string, door = 'prompt') => ({
+  message: { type: 'user', role: 'user', content: [{ type: 'text', text }] },
+  door,
+  origin: { kind: 'user' },
+  uuid,
+}) as const
+
+test('질문마다 그 프롬프트 행 id 가 붙고, Show in chat 은 대화를 못 움직이면 이유를 토스트로 알린다', async ($, on) => {
+  engine(on)
+  const toasts: string[] = []
+  on('ui.toast', (_$, e) => {
+    toasts.push((e as { text: string }).text)
+    return { value: undefined } as never
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: '첫 질문' } as never)
+  await $.session.append(asked('첫 질문', 'row-1') as never)
+  await $.session.append(asked('알림', 'row-x') as never) // 이미 행을 받은 질문은 덮어쓰지 않는다
+  await $.prompt.submit({ text: '/ce-handoff', command: { name: 'ce-handoff' } } as never)
+  await $.session.append(asked('/ce-handoff', 'row-2', 'command') as never)
+  await $.skill.prompt({ skill: 'ce-handoff', text: '...', frontmatter: {}, source: 'plugin' } as never)
+  await $.prompt.submit({ text: '행 없는 질문' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: '↑ Show in chat' })).toBeFalsy() // 최신(Q3)은 행이 없다
+  await ui.press({ key: 'q2' }) // 슬래시 커맨드로 시작한 질문: 행이 질문보다 먼저 저장됐다
+  expect(await ui.find({ type: 'Button', text: '↑ Show in chat' })).toBeTruthy()
+  await ui.press({ key: 'go2' }) // 테스트에는 대화 창이 없어 엔진이 거절한다
+  expect(toasts.length).toBe(1)
+  expect(toasts[0]!.startsWith("Can't show it in chat: ")).toBe(true)
+  await ui.press({ key: 'q2' })
+  await ui.press({ key: 'q1' })
+  expect(await ui.find({ type: 'Button', text: '↑ Show in chat' })).toBeTruthy()
+  await ui.unmount()
+})

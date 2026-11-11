@@ -70,6 +70,13 @@ const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
 
 const begin = ($: EngineInterface, fn: (list: Trace[]) => Trace[]) => update($, traces, fn)
 
+// 대화 창을 질문 줄로 스크롤한다. 엔진이 대화를 직접 그리는 화면(터미널 fullscreen·데스크톱)에서만 움직이고,
+// 일반 터미널 화면(스크롤백)이나 압축·/clear 로 줄이 사라진 경우는 거절 사유를 토스트로 알린다.
+const showInChat = async ($: EngineInterface, requestId: string) => {
+  const r = await $.ui.scroll({ to: { requestId }, block: 'start' }).catch((err: unknown) => ({ deny: String(err) }))
+  if (r.deny) $.ui.toast(`Can't show it in chat: ${r.deny}`)
+}
+
 // 훅 출처 후보: settings 의 hooks(명령 이름으로)와, 켜진 플러그인마다 등록한 훅 이벤트(플러그인 이름으로).
 // 플러그인의 훅 파일은 plugin.json 의 hooks(경로·경로 목록·인라인)가 있으면 그것, 없으면 hooks/hooks.json.
 // 마켓플레이스로 설치된 경우에만 동작한다(플러그인 폴더에서 ~/.claude/plugins 를 찾는다).
@@ -120,6 +127,10 @@ export const register: Register = (on, options) => {
   let lastModel: string | undefined // 가장 최근 요청의 모델: 이유 호출의 출력을 그 모델 가격으로 센다
   let sources: Sources = {}
   let cwd: string | undefined // 세션 작업 폴더: 파일 경로를 상대 경로로 보여 줄 때 쓴다
+  // 질문 행 id 잇기: prompt.submit 이 질문을 연 뒤 행이 저장되면(waiting) 그 질문에 붙이고,
+  // 슬래시 커맨드처럼 행이 먼저 저장되면(asked) 질문이 열릴 때 붙인다.
+  let waiting = false
+  let asked: string | undefined
   // 진행 중인 Skill 호출: 스킬 이름 → 그 호출 안에서 skill.prompt 가 이미 기록했는지.
   const calling = new Map<string, boolean>()
 
@@ -171,7 +182,9 @@ export const register: Register = (on, options) => {
         await update($, parked, () => hold)
       } else {
         await begin($, list => startTrace(list, e.text, Date.now()))
+        waiting = true
       }
+      asked = undefined
     }
     return next(e)
   })
@@ -181,7 +194,9 @@ export const register: Register = (on, options) => {
     if (hold) {
       await update($, parked, () => null)
       if (same(hold.name, e.skill)) {
-        await begin($, list => onLatest(startTrace(list, hold.text, Date.now()), t => addCommand(t, hold.name)))
+        const msg = asked
+        await begin($, list => onLatest(startTrace(list, hold.text, Date.now()), t => ({ ...addCommand(t, hold.name), ...(msg && { msg }) })))
+        asked = undefined
       }
     }
     await latest($, t => addSkill(t, e.skill))
@@ -254,6 +269,13 @@ export const register: Register = (on, options) => {
   })
 
   on('session.append', async ($, e, next) => {
+    // 질문 프롬프트(또는 스킬이 될 슬래시 커맨드)의 행 id: 패널의 "Show in chat" 이 이 행으로 스크롤한다.
+    if ((e.door === 'prompt' || e.door === 'command') && e.agentId === undefined && !e.message.isMeta && !NOT_ASKED.has(e.origin.kind)) {
+      if (waiting) {
+        waiting = false
+        await latest($, t => (t.msg ? t : { ...t, msg: e.uuid }))
+      } else asked = e.uuid
+    }
     if (e.door === 'response') {
       const found = parseReasons(textOf(e.message.content))
       if (found.length) await latest($, t => found.reduce((acc, [n, r]) => withReason(acc, n, r), t))
@@ -333,9 +355,16 @@ export const register: Register = (on, options) => {
                 <Text bold>{`▾ Q${t.id}`}</Text>
                 {when ? <Text dimColor>{` · ${when}`}</Text> : null}
               </Button>
-              <Box paddingLeft={2} marginBottom={secs.length ? 1 : 0}>
+              <Box paddingLeft={2} marginBottom={secs.length && !t.msg ? 1 : 0}>
                 <Text wrap="wrap">{t.full ?? t.question}</Text>
               </Box>
+              {t.msg && (
+                <Box paddingLeft={2} marginBottom={secs.length ? 1 : 0}>
+                  <Button key={`go${t.id}`} plain onPress={() => void showInChat($, t.msg!)}>
+                    <Text underline>↑ Show in chat</Text>
+                  </Button>
+                </Box>
+              )}
               {isOpen && secs.length === 0 && (
                 <Box paddingLeft={2}>
                   <Text dimColor>(no skills or plugin features used)</Text>
