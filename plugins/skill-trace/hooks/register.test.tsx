@@ -347,21 +347,28 @@ for (const options of [{ cost: 'off' }, { reason: 'off', cost: 'on' }] as Record
   })
 }
 
-test('Session 영역: id·모델·권한 모드·폴더를 보이고, 접으면 모델·모드만 한 줄로 남는다', async ($, on) => {
+test('Session 영역: id·모델·effort·권한 모드·폴더를 보이고, 접으면 모델·effort·모드만 한 줄로 남는다', async ($, on) => {
   engine(on)
+  stepEngine(on)
   on('classic.UserPromptSubmit', () => ({}) as never)
   await $.session.start({ cwd: 'C:/work/repo', surface: 'desktop', isInteractive: true })
   await $.classic.UserPromptSubmit({ prompt: '질문', permission_mode: 'plan' } as never)
+  const step = async (extra: object) => {
+    for await (const c of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...extra } as never)) void c
+  }
+  await step({ effort: 'xhigh' })
+  await step({ effort: 'low', agentId: 'sub-1' }) // 서브에이전트의 수준은 Session 영역에 쓰지 않는다
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: '▾ Session' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'sess-1234' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'Opus 5.5' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'xhigh' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'plan' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'C:/work/repo' })).toBeTruthy()
   await ui.press({ key: 'b:session' })
   expect(await ui.find({ type: 'Text', text: '▸ Session' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'sess-1234' })).toBeFalsy()
-  expect(await ui.find({ type: 'Text', text: ' · Opus 5.5 · plan' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: ' · Opus 5.5 · xhigh · plan' })).toBeTruthy()
   await ui.unmount()
 })
 

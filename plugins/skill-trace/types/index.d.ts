@@ -32,8 +32,9 @@ export type Spend = {
 /**
  * 패널 맨 위 Session 영역(0.3.0): 지금 세션의 id·모델·권한 모드·작업 폴더.
  * mode 는 묻는 API 가 없어 settings 훅 입력의 permission_mode 에서 읽는다(프롬프트·도구 호출마다 갱신).
+ * effort(0.5.0)는 메인 루프의 모델 요청(turn.step)이 실제로 보내는 수준: low…max, effort 를 받지 않는 모델이면 없음.
  */
-export type SessionInfo = { id?: string; model?: string; mode?: string; cwd?: string }
+export type SessionInfo = { id?: string; model?: string; effort?: string; mode?: string; cwd?: string }
 
 /** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
 export type Parked = { text: string; name: string }

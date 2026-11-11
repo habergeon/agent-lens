@@ -222,6 +222,11 @@ export const register: Register = (on, options) => {
 
   // 모델 요청마다 API 가 알려 준 사용량을 기록한다(메인·서브에이전트 모두). 응답은 그대로 흘려보낸다.
   on('turn.step', async function* ($, e, next) {
+    // Session 영역의 Effort: 메인 루프 요청이 실제로 쓰는 수준(effort 를 받지 않는 모델이면 비움).
+    if (e.agentId === undefined) {
+      const effort = e.effort === undefined ? undefined : String(e.effort)
+      await update($, session, s => (s.effort === effort ? s : { ...s, effort }))
+    }
     const r = yield* next(e)
     if (trackCost && r.usage) {
       const usage = r.usage
@@ -294,14 +299,14 @@ export const register: Register = (on, options) => {
 
     // Session 영역: 펼치면 항목마다 한 줄(라벨 흐림, 값 기본색), 접으면 머리줄 옆에 모델·모드만.
     const info = await read($, session)
-    const rows = ([['ID', info.id], ['Model', info.model], ['Permissions', info.mode], ['Folder', info.cwd]] as [string, string | undefined][])
+    const rows = ([['ID', info.id], ['Model', info.model], ['Effort', info.effort], ['Permissions', info.mode], ['Folder', info.cwd]] as [string, string | undefined][])
       .filter((r): r is [string, string] => !!r[1])
     const sOpen = !flipped.includes('session')
     const head = rows.length === 0 ? null : (
       <Box key="session" flexDirection="column" marginBottom={1}>
         <Button key="b:session" plain onPress={() => toggle('session')}>
           <Text bold>{`${sOpen ? '▾' : '▸'} Session`}</Text>
-          {sOpen ? null : <Text dimColor wrap="truncate-end">{` · ${[info.model, info.mode].filter(Boolean).join(' · ')}`}</Text>}
+          {sOpen ? null : <Text dimColor wrap="truncate-end">{` · ${[info.model, info.effort, info.mode].filter(Boolean).join(' · ')}`}</Text>}
         </Button>
         {sOpen &&
           rows.map(([k, v], i) => (
