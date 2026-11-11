@@ -378,6 +378,13 @@ const costSection = (t: Trace): Section => {
   return { key: 'cost', title: 'Cost', color: 'remember', count: spend.length, badge: spend.length ? money(chat) : undefined, items }
 }
 
-/** 접힌 질문 아래 한 줄 요약: "스킬 1 · MCP 6 · 훅 135". */
-export const counts = (t: Trace): string =>
-  sections(t).map(s => (s.badge ? s.badge : `${s.key === 'agent' ? 'Agents' : s.title} ${s.count}`)).join(' · ')
+/**
+ * 접힌 질문 아래 한 줄 요약: "$0.359 · Skills 1 · MCP 6 · Hooks 135".
+ * 줄은 패널 폭에서 … 으로 잘리므로 금액(badge)을 맨 앞에 둔다: 섹션이 많은 질문에서도 금액은 보인다.
+ */
+export const counts = (t: Trace): string => {
+  const all = sections(t)
+  return [...all.filter(s => s.badge), ...all.filter(s => !s.badge)]
+    .map(s => s.badge ?? `${s.key === 'agent' ? 'Agents' : s.title} ${s.count}`)
+    .join(' · ')
+}

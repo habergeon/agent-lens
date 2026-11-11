@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Trace } from '../types'
-import { OVERHEAD_TOKENS, addReasonCall, addRequest, counts, estimateTokens, kilo, money, priceOf, sections, startTrace } from './trace'
+import { OVERHEAD_TOKENS, addReasonCall, addRequest, addSkill, addTool, counts, estimateTokens, kilo, money, priceOf, sections, startTrace } from './trace'
 
 const one = (): Trace => startTrace([], '질문')[0]!
 const usage = (model: string, input: number, output: number, cacheRead: number, cacheWrite: number) => ({
@@ -48,6 +48,11 @@ test('the Cost section shows Chat and the skill-trace share; the summary shows t
   expect(cost.items[1]!.text).toBe('skill-trace $0.0001 (est.)')
   expect(counts(t)).toBe('$0.104')
   expect(sections(one()).find(s => s.key === 'cost')).toBe(undefined)
+})
+
+test('the summary puts the amount first, so a pane-width cut never hides it', async () => {
+  const t = addRequest(addTool(addSkill(one(), 'ce-handoff'), 'Read', false), usage('claude-opus-5-5', 1000, 2000, 100_000, 5000), 0)
+  expect(counts(t)).toBe('$0.104 · Skills 1 · Tools 1')
 })
 
 test('helpers: token estimate, money and kilo formats', async () => {

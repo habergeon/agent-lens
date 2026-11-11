@@ -29,6 +29,12 @@ export type Spend = {
   modCost?: number
 }
 
+/**
+ * 패널 맨 위 Session 영역(0.3.0): 지금 세션의 id·모델·권한 모드·작업 폴더.
+ * mode 는 묻는 API 가 없어 settings 훅 입력의 permission_mode 에서 읽는다(프롬프트·도구 호출마다 갱신).
+ */
+export type SessionInfo = { id?: string; model?: string; mode?: string; cwd?: string }
+
 /** 스킬로 이어질지 아직 모르는 슬래시 커맨드. */
 export type Parked = { text: string; name: string }
 
@@ -57,12 +63,13 @@ export type Trace = {
 declare module 'claude-code' {
   interface PluginState {
     /** qopen: 질문 id → 사람이 정한 펼침 상태. 없으면 최신 질문만 펼침. */
-    /** flip: 기본 펼침 상태(훅만 접힘)를 사람이 뒤집은 섹션 키 `${질문 id}:${섹션 key}`. */
+    /** flip: 기본 펼침 상태(훅만 접힘)를 사람이 뒤집은 섹션 키 `${질문 id}:${섹션 key}`, Session 영역은 `session`. */
     'skill-trace': {
       traces: Shaped<Trace[]>
       parked: Shaped<Parked | null>
       qopen: Shaped<Record<string, boolean>>
       flip: Shaped<string[]>
+      session: Shaped<SessionInfo>
     }
   }
 }

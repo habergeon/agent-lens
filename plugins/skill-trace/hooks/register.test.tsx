@@ -28,6 +28,9 @@ const engine = (on: On, opened: string[] = []) => {
   on('skill.prompt', (_, e) => ({ text: e.text }))
   on('tool.call', () => ({ result: {} }))
   on('prompt.compose', () => ({ sections: [] }))
+  on('session.id', () => ({ value: 'sess-1234' }))
+  on('session.model', () => ({ value: 'Opus 5.5' }))
+  on('session.cwd', () => ({ value: 'C:/work/repo' }))
 }
 
 const said = (text: string) => ({
@@ -178,7 +181,8 @@ test('스킬로 이어지지 않는 슬래시 커맨드는 질문으로 기록�
   engine(on)
   await $.prompt.submit({ text: '/skill-trace', command: { name: 'skill-trace', args: '' } } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
+  expect(await ui.find({ type: 'Text', text: 'No questions recorded yet.' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /^[▾▸] Q/ })).toBeFalsy()
   await ui.unmount()
 })
 
@@ -197,7 +201,8 @@ test('백그라운드·피어 프롬프트는 질문으로 기록되지 않는�
   engine(on)
   await $.prompt.submit({ text: '작업 끝', origin: { kind: 'task-notification' } } as never)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
+  expect(await ui.find({ type: 'Text', text: 'No questions recorded yet.' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /^[▾▸] Q/ })).toBeFalsy()
   await ui.unmount()
 })
 
@@ -268,7 +273,8 @@ test('메인 턴이 끝나면 질문의 시작·끝·소요 시간이 보인다'
 test('기록이 없으면 안내 문구를 보인다', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('No questions recorded yet.')
+  expect(await ui.find({ type: 'Text', text: 'No questions recorded yet.' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /^[▾▸] Q/ })).toBeFalsy()
   await ui.unmount()
 })
 
@@ -329,7 +335,7 @@ test('모델 요청의 사용량이 Cost 섹션에 모델·토큰·금액으로 
   await ui.unmount()
 })
 
-for (const options of [{ cost: 'off' }, { reason: 'off', cost: 'on' }] as const) {
+for (const options of [{ cost: 'off' }, { reason: 'off', cost: 'on' }] as Record<string, string>[]) {
   test(`비용 기록 꺼짐: ${JSON.stringify(options)}`, { options }, async ($, on) => {
     engine(on)
     stepEngine(on)
@@ -340,3 +346,39 @@ for (const options of [{ cost: 'off' }, { reason: 'off', cost: 'on' }] as const)
     await ui.unmount()
   })
 }
+
+test('Session 영역: id·모델·권한 모드·폴더를 보이고, 접으면 모델·모드만 한 줄로 남는다', async ($, on) => {
+  engine(on)
+  on('classic.UserPromptSubmit', () => ({}) as never)
+  await $.session.start({ cwd: 'C:/work/repo', surface: 'desktop', isInteractive: true })
+  await $.classic.UserPromptSubmit({ prompt: '질문', permission_mode: 'plan' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: '▾ Session' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'sess-1234' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Opus 5.5' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'plan' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'C:/work/repo' })).toBeTruthy()
+  await ui.press({ key: 'b:session' })
+  expect(await ui.find({ type: 'Text', text: '▸ Session' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'sess-1234' })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: ' · Opus 5.5 · plan' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('두 번째 질문(스킬·이유 호출 포함)에도 비용이 쌓인다', async ($, on) => {
+  engine(on)
+  stepEngine(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: '첫 질문' } as never)
+  await runStep($ as never)
+  await $.prompt.submit({ text: '둘째 질문' } as never)
+  await runStep($ as never)
+  await $.tool.call({ tool: 'mcp__skill-trace__reason', skill: 'ce-handoff', reason: '인수인계' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'ce-handoff' } as never)
+  await runStep($ as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^claude-opus-5-5 ×2 / })).toBeTruthy()
+  await ui.press({ key: 'q1' })
+  expect(await ui.find({ type: 'Text', text: /^claude-opus-5-5 ×1 / })).toBeTruthy()
+  await ui.unmount()
+})

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Parked, Trace } from '../types'
+import type { Parked, SessionInfo, Trace } from '../types'
 import {
   OVERHEAD_TOKENS, REASON_RULE, REASON_TOOL, REASON_TOOL_SPEC, addAgent, addReasonCall, addRequest, addTool, estimateTokens, addCommand, addHook, addMcp, addSkill, addSource, counts, cut,
   hookEvents, markSub, onLatest, parseReasons, same, sections, settingsSources, startTrace, timing, title,
@@ -38,6 +38,32 @@ const flip = atom({ plugin: 'skill-trace', key: 'flip' } as const, [] as string[
   shape: 'flip-1',
 })
 const FOLDED_BY_DEFAULT = new Set(['tool', 'hook'])
+
+// 패널 맨 위 Session 영역. 펼침은 flip 의 'session' 키로 뒤집는다(기본 펼침).
+const session = atom({ plugin: 'skill-trace', key: 'session' } as const, {} as SessionInfo, {
+  shape: 'session-1',
+})
+
+// 세션 id 는 /clear 뒤에, 모델은 /model 뒤에 바뀐다: 시작할 때와 프롬프트마다 다시 읽는다.
+const refresh = async ($: EngineInterface) => {
+  const ask = async <T,>(f: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await f()
+    } catch {
+      return undefined // 못 읽은 값은 비워 두고 나머지만 보인다
+    }
+  }
+  const [id, model, cwd] = await Promise.all([
+    ask(() => $.session.id()), ask(() => $.session.model()), ask(() => $.session.cwd()),
+  ])
+  await update($, session, s => ({ ...s, ...(id && { id }), ...(model && { model }), ...(cwd && { cwd }) }))
+}
+
+// 권한 모드를 묻는 API 는 없다: settings 훅 입력의 permission_mode 에서 읽는다.
+const noteMode = async ($: EngineInterface, e: unknown) => {
+  const mode = (e as { permission_mode?: unknown }).permission_mode
+  if (typeof mode === 'string' && mode) await update($, session, s => (s.mode === mode ? s : { ...s, mode }))
+}
 
 const latest = ($: EngineInterface, fn: (t: Trace) => Trace) =>
   update($, traces, list => onLatest(list, fn))
@@ -100,6 +126,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     sources = await loadSources($)
     cwd = e.cwd
+    await refresh($)
     if (askReason) {
       await $.tool.register(REASON_TOOL_SPEC as never)
     }
@@ -125,7 +152,18 @@ export const register: Register = (on, options) => {
     }
   })
 
+  // 사용자가 shift+tab 으로 바꾼 모드는 다음 프롬프트나 도구 호출에서 보인다.
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.PostToolUse', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+
   on('prompt.submit', async ($, e, next) => {
+    await refresh($)
     await update($, parked, () => null)
     if (!e.isMeta && !NOT_ASKED.has(e.origin?.kind)) {
       if (e.command) {
@@ -229,17 +267,49 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, traces)
-    if (list.length === 0) return <Text dimColor>No questions recorded yet.</Text>
-    const newest = list[list.length - 1]!.id
-    const chosen = await read($, qopen)
     const flipped = await read($, flip)
     const toggle = (k: string) => void update($, flip, ks => (ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]))
+
+    // Session 영역: 펼치면 항목마다 한 줄(라벨 흐림, 값 기본색), 접으면 머리줄 옆에 모델·모드만.
+    const info = await read($, session)
+    const rows = ([['ID', info.id], ['Model', info.model], ['Permissions', info.mode], ['Folder', info.cwd]] as [string, string | undefined][])
+      .filter((r): r is [string, string] => !!r[1])
+    const sOpen = !flipped.includes('session')
+    const head = rows.length === 0 ? null : (
+      <Box key="session" flexDirection="column" marginBottom={1}>
+        <Button key="b:session" plain onPress={() => toggle('session')}>
+          <Text bold>{`${sOpen ? '▾' : '▸'} Session`}</Text>
+          {sOpen ? null : <Text dimColor wrap="truncate-end">{` · ${[info.model, info.mode].filter(Boolean).join(' · ')}`}</Text>}
+        </Button>
+        {sOpen &&
+          rows.map(([k, v], i) => (
+            <Box key={`r:${k}`} flexDirection="row" paddingLeft={2}>
+              <Text dimColor>{`${i === rows.length - 1 ? '└' : '├'} ${k.padEnd(12)}`}</Text>
+              <Box flexShrink={1}>
+                <Text wrap="wrap">{v}</Text>
+              </Box>
+            </Box>
+          ))}
+      </Box>
+    )
+
+    if (list.length === 0) {
+      return (
+        <Box flexDirection="column">
+          {head}
+          <Text dimColor>No questions recorded yet.</Text>
+        </Box>
+      )
+    }
+    const newest = list[list.length - 1]!.id
+    const chosen = await read($, qopen)
 
     // 트리: 질문(▾/▸) → 섹션(▾/▸) → 항목(├/└) → 설명(들여 쓴 흐린 줄).
     // 대비 규칙: 질문·항목은 기본 글자색, 색은 섹션 제목에만, 흐림(dim)은 메타(시각·개수·출처)에만.
     // 접힌 질문은 한 줄로 패널 폭에서 … 으로 자르고, 펼친 질문은 머리줄에 번호·시간, 본문에 질문 전체.
     return (
       <Box flexDirection="column">
+        {head}
         {[...list].reverse().map(t => {
           const isOpen = chosen[String(t.id)] ?? t.id === newest
           const press = () => void update($, qopen, m => ({ ...m, [String(t.id)]: !isOpen }))
